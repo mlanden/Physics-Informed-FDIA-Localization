@@ -1,14 +1,15 @@
 data:
-  normal: "C://Users/Matthew/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.xlsx"
+  normal: "C://Users/Matthew/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Attack_v0.csv"
   window_size: 1
   n_features: 51
 
 model:
-  hidden_layers: [128, 128, 128]
+  hidden_layers: [100, 100, 100]
   activation: "leakyRelu"
   sequence_length: 5
 
 train:
   batch_size: 256
-  epochs: 10
-  lr: 0.0001
+  epochs: 500
+  lr: 0.0005
+  regularization: 0.00001

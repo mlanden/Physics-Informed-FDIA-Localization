@@ -11,16 +11,18 @@ class PredictionModel(nn.Module):
         n_features = conf["data"]["n_features"]
 
         self.activation = activations[conf["model"]["activation"]]
-        self.linear = nn.Linear(n_features, hidden_layers[0])
+        self.input_linear = nn.Linear(n_features, hidden_layers[0])
         self.rnns = []
         for i in range(len(hidden_layers[:-1])):
-            self.rnns.append(nn.LSTM(hidden_layers[i], hidden_layers[i + 1]))
-        self.rnns.append(nn.LSTM(hidden_layers[-1], n_features))
+            self.rnns.append(nn.LSTM(hidden_layers[i], hidden_layers[i + 1], batch_first = True))
+        self.rnns = nn.ModuleList(self.rnns)
+        self.output_linear = nn.Linear(hidden_layers[-1], n_features)
 
     def forward(self, x):
-        x = self.linear(x)
+        x = self.input_linear(x)
         x = self.activation(x)
         for rnn in self.rnns:
             x, hidden = rnn(x)
             x = self.activation(x)
+        x = self.output_linear(x)
         return x
