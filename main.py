@@ -1,33 +1,34 @@
-import torch.nn
+import os
+from os import path
 import yaml
 import sys
 
-from torch.utils.data import DataLoader
-from torch import optim
 from datasets import SWATDataset
-from models import PredictionModel
+from training import rnn_train, find_normal_error
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("Usage: main.py config")
         quit(1)
+
     conf_path = sys.argv[1]
     with open(conf_path, "r") as fd:
         conf = yaml.safe_load(fd)
+    checkpoint_dir = path.join("checkpoint", conf["train"]["checkpoint"])
+    if not path.exists(checkpoint_dir):
+        os.makedirs(checkpoint_dir, exist_ok = True)
 
-    data = SWATDataset(conf["data"]["normal"],
-                       sequence_len = conf["model"]["sequence_length"], window_size = conf["data"]["window_size"])
-    normal_data = DataLoader(data, batch_size = conf["train"]["batch_size"], shuffle = True)
-
-    model = PredictionModel(conf)
-    optimizer = optim.Adam(model.parameters(), lr = conf["train"]["lr"])
-    loss_fn = torch.nn.MSELoss()
-    epochs = conf["train"]["epochs"]
-    for i in range(epochs):
-        for seq, target in normal_data:
-            predicted = model(seq)
-            loss = loss_fn(predicted, target)
-
-            optimizer.zero_grad()
-            loss.backeard()
-            optimizer.step()
+    task = conf["task"]
+    if task == "train":
+        dataset = SWATDataset(conf, conf["data"]["normal"],
+                              sequence_len = conf["model"]["sequence_length"],
+                              train = True,
+                              load_scaler = False)
+        rnn_train(conf, dataset)
+    elif task == "threshold":
+        dataset = SWATDataset(conf, conf["data"]["normal"],
+                              sequence_len = 1,
+                              train = True,
+                              load_scaler = True)
+        find_normal_error(conf, dataset)
