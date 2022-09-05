@@ -1,1 +1,1 @@
-from .train import rnn_train, find_normal_error
+from .trainer import Trainer

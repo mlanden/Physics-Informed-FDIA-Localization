@@ -1,5 +1,5 @@
 #task: "train"
-task: "threshold"
+task: "error"
 data:
 #  normal: "../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv"
   normal: "../Datasets/SWAT/First_Hour_2015.csv"
@@ -13,7 +13,12 @@ model:
 
 train:
   batch_size: 256
-  epochs: 500
+  epochs: 50
   lr: 0.0005
   regularization: 0.00001
   checkpoint: swat_2015
+  tensorboard: False
+  train_fraction: 0.5
+  validate_fraction: 0.1
+  find_error_fraction: 0.2
+  validation_frequency: 20

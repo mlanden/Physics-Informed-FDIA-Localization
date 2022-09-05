@@ -4,7 +4,7 @@ import yaml
 import sys
 
 from datasets import SWATDataset
-from training import rnn_train, find_normal_error
+from training import Trainer
 
 
 if __name__ == '__main__':
@@ -25,10 +25,14 @@ if __name__ == '__main__':
                               sequence_len = conf["model"]["sequence_length"],
                               train = True,
                               load_scaler = False)
-        rnn_train(conf, dataset)
-    elif task == "threshold":
+        trainer = Trainer(conf, dataset)
+        trainer.train_prediction()
+    elif task == "error":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len = 1,
                               train = True,
                               load_scaler = True)
-        find_normal_error(conf, dataset)
+        trainer = Trainer(conf, dataset)
+        trainer.find_normal_error()
+    else:
+        raise RuntimeError(f"Unknown task: {task}")
