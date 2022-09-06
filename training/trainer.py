@@ -1,5 +1,6 @@
 import time
 from os import path
+from tqdm import tqdm
 
 import numpy as np
 import torch
@@ -102,9 +103,9 @@ class Trainer:
         model.eval()
         errors = []
 
-        hidden_state = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
-        for features, target in normal_data:
-            predicted, hidden_state = model(features, hidden_state)
+        hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
+        for features, target in tqdm(normal_data):
+            predicted, hidden_states = model(features, hidden_states)
             predicted = predicted.view(1, -1)
             target = target.view(1, -1)
 
@@ -122,4 +123,72 @@ class Trainer:
         torch.save(obj, self.normal_behavior_path)
         print("Normal behavior saved")
 
-    # def test(self):
+    def test(self):
+        dataset = DataLoader(self.dataset)
+        print(f"Number of samples: {len(dataset)}")
+
+        model = torch.load(self.model_path)
+        model.eval()
+        obj = torch.load(self.normal_behavior_path)
+        normal_means = obj["mean"]
+        normal_stds = obj["std"]
+        tp = 0
+        tn = 0
+        fp = 0
+        fn = 0
+        delays = []
+
+        attack_start = -1
+        attack_detected = False
+
+        hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
+        step = 0
+        for features, target, attack in tqdm(dataset):
+            if attack_start > -1 and not attack:
+                attack_start = -1
+                if not attack_detected:
+                    # Did not detect attack
+                    fn += 1
+                attack_detected = False
+
+            if attack_detected:
+                # Already detected attack
+                continue
+
+            features = features.unsqueeze(0)
+            predicted, hidden_states = model(features, hidden_states)
+            predicted = predicted.view(1, -1)
+            target = target.view(1, -1)
+
+            error = torch.abs(predicted - target)
+            score = torch.abs(error - normal_means) / normal_stds
+
+            alarm = torch.any(score > 1)
+
+            if attack_start == -1 and attack:
+                attack_start = step
+
+            if attack:
+                if alarm:
+                    delay = step - attack_start
+                    delays.append(delay)
+                    tp += 1
+                    attack_detected = True
+            else:
+                if alarm:
+                    fp += 1
+                else:
+                    tn += 1
+            step += 1
+            # if step % 1000 == 0:
+            #     print(f"Tested {step:5d} / {len(dataset)} samples")
+
+        tpr = tp / (tp + fn)
+        tnr = tn / (tn + fp)
+        fpr = fp / (fp + tn)
+        fnr = fn / (fn + tp)
+
+        print(f"True positive: {tpr * 100 :3.2f}")
+        print(f"True negative: {tnr * 100 :3.2f}")
+        print(f"False Positive: {fpr * 100 :3.2f}")
+        print(f"False Negatives: {fnr * 100 :3.2f}")

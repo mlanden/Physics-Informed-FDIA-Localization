@@ -20,6 +20,7 @@ if __name__ == '__main__':
         os.makedirs(checkpoint_dir, exist_ok = True)
 
     task = conf["task"]
+    print("Task:", task)
     if task == "train":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len = conf["model"]["sequence_length"],
@@ -34,5 +35,12 @@ if __name__ == '__main__':
                               load_scaler = True)
         trainer = Trainer(conf, dataset)
         trainer.find_normal_error()
+    elif task == "test":
+        dataset = SWATDataset(conf, conf["data"]["attack"],
+                              sequence_len = 1,
+                              train = False,
+                              load_scaler = True)
+        trainer = Trainer(conf, dataset)
+        trainer.test()
     else:
         raise RuntimeError(f"Unknown task: {task}")

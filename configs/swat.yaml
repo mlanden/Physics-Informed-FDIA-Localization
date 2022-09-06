@@ -1,8 +1,10 @@
 #task: "train"
-task: "error"
+#task: "error"
+task: "test"
 data:
 #  normal: "../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv"
   normal: "../Datasets/SWAT/First_Hour_2015.csv"
+  attack: "../Datasets/SWAT/SWaT_Dataset_Attack_v0.csv"
   n_features: 51
 
 model:

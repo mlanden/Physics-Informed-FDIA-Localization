@@ -32,8 +32,9 @@ class SWATDataset(Dataset):
             self.scaled_features = self.scaler.fit_transform(self.features)
             joblib.dump(self.scaler, scale_file)
 
-        self.sequences, self.targets = None, None
-        self.make_sequences()
+        if self.train:
+            self.sequences, self.targets = None, None
+            self.make_sequences()
 
     def make_sequences(self):
         self.sequences = []
@@ -60,4 +61,6 @@ class SWATDataset(Dataset):
         if self.train:
             return self.sequences[item], self.targets[item]
         else:
-            return np.array(self.scaled_features[item, :], dtype = np.float32), self.labels.iloc[item]
+            return (np.array(self.scaled_features[item, :], dtype = np.float32),
+                    np.array(self.features[item + 1, :], dtype = np.float32),
+                    self.labels.iloc[item] == "Attack")
