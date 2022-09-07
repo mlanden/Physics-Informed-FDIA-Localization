@@ -42,7 +42,7 @@ class SWATDataset(Dataset):
         i = 0
         while i < len(self.features) - self.sequence_len:
             seq = self.scaled_features[i: i + self.sequence_len, :]
-            target = self.features[i + self.sequence_len, :]
+            target = self.scaled_features[i + self.sequence_len, :]
             self.sequences.append(seq)
             self.targets.append(target)
             i += self.window_size
@@ -55,12 +55,12 @@ class SWATDataset(Dataset):
         if self.train:
             return len(self.sequences)
         else:
-            return len(self.scaled_features)
+            return len(self.scaled_features) - 1
 
     def __getitem__(self, item):
         if self.train:
             return self.sequences[item], self.targets[item]
         else:
             return (np.array(self.scaled_features[item, :], dtype = np.float32),
-                    np.array(self.features[item + 1, :], dtype = np.float32),
+                    np.array(self.scaled_features[item + 1, :], dtype = np.float32),
                     self.labels.iloc[item] == "Attack")

@@ -1,26 +1,27 @@
-#task: "train"
+task: "train"
 #task: "error"
-task: "test"
+#task: "test"
 data:
-#  normal: "../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv"
-  normal: "../Datasets/SWAT/First_Hour_2015.csv"
+  normal: "../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv"
+#  normal: "../Datasets/SWAT/First_Hour_2015.csv"
   attack: "../Datasets/SWAT/SWaT_Dataset_Attack_v0.csv"
   n_features: 51
 
 model:
   hidden_layers: [100, 100, 100]
   activation: "leakyRelu"
-  sequence_length: 5
-  window_size: 1
+  sequence_length: 25
+  window_size: 20
 
 train:
+  n_workers: 1
   batch_size: 256
-  epochs: 50
+  epochs: 2000
   lr: 0.0005
   regularization: 0.00001
-  checkpoint: swat_2015
-  tensorboard: False
+  checkpoint: swat_2015_scale
+  tensorboard: true
   train_fraction: 0.5
   validate_fraction: 0.1
-  find_error_fraction: 0.2
-  validation_frequency: 20
+  find_error_fraction: 0.3
+  validation_frequency: 100

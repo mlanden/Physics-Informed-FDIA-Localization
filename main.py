@@ -16,8 +16,11 @@ if __name__ == '__main__':
     with open(conf_path, "r") as fd:
         conf = yaml.safe_load(fd)
     checkpoint_dir = path.join("checkpoint", conf["train"]["checkpoint"])
+    results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok = True)
+    if not path.exists(results_dir):
+        os.makedirs(results_dir, exist_ok = True)
 
     task = conf["task"]
     print("Task:", task)
