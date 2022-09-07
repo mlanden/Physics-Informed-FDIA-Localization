@@ -19,9 +19,12 @@ from utils import launch_distributed
 
 
 class Trainer:
-    def __init__(self, conf, dataset):
+    def __init__(self, conf: dict,
+                 dataset: torch.utils.data.Dataset,
+                 model: PredictionModel):
         self.conf = conf
         self.dataset = dataset
+        self.model = model
 
         self.train_fraction = conf["train"]["train_fraction"]
         self.validate_fraction = conf["train"]["validate_fraction"]
@@ -53,12 +56,12 @@ class Trainer:
         train_len = int(datalen * self.train_fraction)
         train_idx = list(range(0, train_len))
         train_data = Subset(self.dataset, train_idx)
+        print("Train set length:", train_len)
 
         val_len = int(datalen * self.validate_fraction)
         val_idx = list(range(train_len, train_len + val_len))
         validation_data = Subset(self.dataset, val_idx)
 
-        model = PredictionModel(self.conf)
         scalar = joblib.load(self.scalar_path)
         if not dist.is_initialized():
             train_data = DataLoader(train_data, batch_size = self.batch_size, shuffle = True)
@@ -73,25 +76,25 @@ class Trainer:
                                     shuffle = False,
                                     sampler = train_sampler)
             validation_data = DataLoader(validation_data, sampler = validation_sampler)
-            model = DDP(model)
+            self.model = DDP(self.model)
 
         if self.decay > 0:
-            optimizer = optim.Adam(model.parameters(), lr = self.learning_rate, weight_decay = self.decay)
+            optimizer = optim.Adam(self.model.parameters(), lr = self.learning_rate, weight_decay = self.decay)
         else:
-            optimizer = optim.Adam(model.parameters(), lr = self.learning_rate)
-
-        loss_fn = torch.nn.MSELoss()
+            optimizer = optim.Adam(self.model.parameters(), lr = self.learning_rate)
 
         writer = SummaryWriter("tf_board/" + self.checkpoint) if self.use_tensorboard else None
         start = time.time()
         for i in range(self.epochs):
-            model.train()
+            self.model.train()
+            count = 0
             epoch_loss = torch.tensor(0.0)
             for seq, target in train_data:
-                predicted = model(seq)
+                count += seq.shape[0]
+                predicted = self.model(seq)
                 predicted = predicted[:, -1, :]
 
-                loss = loss_fn(predicted, target)
+                loss = self.model.loss(predicted, target)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -105,12 +108,12 @@ class Trainer:
                 writer.add_scalar("Loss/train", epoch_loss.item(), i)
 
             if self.validation_frequency > 0 and (i + 1) % self.validation_frequency == 0:
-                model.eval()
+                self.model.eval()
                 val_loss = torch.tensor(0.0)
                 for seq, target in validation_data:
-                    predicted = model(seq)
+                    predicted = self.model(seq)
                     predicted = predicted[:, -1, :]
-                    val_loss += loss_fn(predicted, target)
+                    val_loss += self.model.loss(predicted, target)
 
                 val_loss /= len(validation_data)
                 if dist.is_initialized():
@@ -126,7 +129,7 @@ class Trainer:
             if i % 10 == 0 and (not dist.is_initialized() or dist.get_rank() == 0):
                 length = time.time() - start
                 print(f"Epoch {i :3d} / {self.epochs}: Loss: {epoch_loss}, {length} seconds", flush = True)
-                torch.save(model, self.model_path)
+                torch.save(self.model, self.model_path)
 
         if not dist.is_initialized() or dist.get_rank() == 0:
             length = time.time() - start
@@ -140,13 +143,12 @@ class Trainer:
         normal_data = DataLoader(normal)
         print(f"Normal sequences: {len(normal_data)}")
 
-        model = torch.load(self.model_path)
-        model.eval()
+        self.model.eval()
         errors = []
 
         hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
         for features, target in tqdm(normal_data):
-            predicted, hidden_states = model(features, hidden_states)
+            predicted, hidden_states = self.model(features, hidden_states)
             predicted = predicted.view(1, -1)
             target = target.view(1, -1)
 
@@ -169,8 +171,7 @@ class Trainer:
             dataset = DataLoader(self.dataset)
             print(f"Number of samples: {len(dataset)}")
 
-            model = torch.load(self.model_path)
-            model.eval()
+            self.model.eval()
             obj = torch.load(self.normal_behavior_path)
             normal_means = obj["mean"]
             normal_stds = obj["std"]
@@ -198,7 +199,7 @@ class Trainer:
                     continue
 
                 features = features.unsqueeze(0)
-                predicted, hidden_states = model(features, hidden_states)
+                predicted, hidden_states = self.model(features, hidden_states)
                 predicted = predicted.view(1, -1)
                 target = target.view(1, -1)
 

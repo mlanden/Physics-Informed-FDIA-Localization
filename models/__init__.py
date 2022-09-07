@@ -1,1 +1,2 @@
+from .swat_prediction_model import SwatPredictionModel
 from .prediction_model import PredictionModel

@@ -5,6 +5,7 @@ import sys
 
 from datasets import SWATDataset
 from training import Trainer
+from models import SwatPredictionModel
 
 
 if __name__ == '__main__':
@@ -22,6 +23,7 @@ if __name__ == '__main__':
     if not path.exists(results_dir):
         os.makedirs(results_dir, exist_ok = True)
 
+    model = SwatPredictionModel(conf)
     task = conf["task"]
     print("Task:", task)
     if task == "train":
@@ -29,21 +31,27 @@ if __name__ == '__main__':
                               sequence_len = conf["model"]["sequence_length"],
                               train = True,
                               load_scaler = False)
-        trainer = Trainer(conf, dataset)
+        trainer = Trainer(conf, dataset, model)
         trainer.train_prediction()
     elif task == "error":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len = 1,
                               train = True,
                               load_scaler = True)
-        trainer = Trainer(conf, dataset)
+        trainer = Trainer(conf, dataset, model)
         trainer.find_normal_error()
     elif task == "test":
         dataset = SWATDataset(conf, conf["data"]["attack"],
                               sequence_len = 1,
                               train = False,
                               load_scaler = True)
-        trainer = Trainer(conf, dataset)
+        trainer = Trainer(conf, dataset, path)
         trainer.test()
+    elif task == "plot":
+        dataset = SWATDataset(conf, conf["data"]["normal"],
+                              sequence_len = 1,
+                              train = False,
+                              load_scaler = False)
+        dataset.plot()
     else:
         raise RuntimeError(f"Unknown task: {task}")
