@@ -95,7 +95,7 @@ class SwatPredictionModel(PredictionModel):
                 new_idx = 0
                 while k < batch.shape[2]:
                     if new_idx in CATEGORICAL_VALUES:
-                        sample = batch[i, j, k: k + self.embedding_size].clone().detach().requires_grad_(True)
+                        sample = batch[i, j, k: k + self.embedding_size].clone().requires_grad_(True)
                         distance = torch.norm(self.embeddings[embedding_idx].weight.data - sample, dim = 1)
                         category = torch.argmin(distance)
                         if CATEGORICAL_VALUES[new_idx] == 2:
@@ -104,7 +104,7 @@ class SwatPredictionModel(PredictionModel):
                         k += self.embedding_size
                         embedding_idx += 1
                     else:
-                        new_batch[i, j, new_idx] = batch[i, j, k].clone().detach().requires_grad_(True)
+                        new_batch[i, j, new_idx] = batch[i, j, k].clone().requires_grad_(True)
                         k += 1
                     new_idx += 1
         return new_batch
