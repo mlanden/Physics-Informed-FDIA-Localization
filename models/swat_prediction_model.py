@@ -25,21 +25,24 @@ class SwatPredictionModel(PredictionModel):
         n_features = conf["data"]["n_features"]
         self.embedding_size = conf["model"]["embedding_size"]
         self.mse_loss_fn = nn.MSELoss()
+        self.classification_loss = nn.CrossEntropyLoss()
 
         self.activation = activations[conf["model"]["activation"]]
         self.input_linear = nn.Linear(n_features + len(CATEGORICAL_VALUES) * (self.embedding_size - 1),
                                       hidden_layers[0])
         self.embeddings = nn.ModuleList()
+        self.classifications = nn.ModuleList()
         for size in CATEGORICAL_VALUES.values():
             self.embeddings.append(nn.Embedding(size, self.embedding_size))
+            self.classifications.append(nn.Linear(hidden_layers[-1], size))
+
         self.rnns = nn.ModuleList()
         for i in range(len(hidden_layers[:-1])):
-            self.rnns.append(nn.LSTM(hidden_layers[i], hidden_layers[i + 1], batch_first = True))
+            self.rnns.append(nn.LSTM(hidden_layers[i], hidden_layers[i + 1], batch_first=True))
 
-        self.output_linear = nn.Linear(hidden_layers[-1], n_features + len(CATEGORICAL_VALUES) *
-                                       (self.embedding_size - 1), hidden_layers[0])
+        self.output_linear = nn.Linear(hidden_layers[-1], n_features - len(CATEGORICAL_VALUES))
 
-    def forward(self, x, hidden_states = None) -> Union[Tuple[torch.Tensor, Tuple], torch.Tensor]:
+    def forward(self, x, hidden_states=None) -> Union[Tuple[torch.Tensor, Tuple], torch.Tensor]:
         x = self.embed(x)
         x = self.input_linear(x)
         x = self.activation(x)
@@ -49,16 +52,44 @@ class SwatPredictionModel(PredictionModel):
             if hidden_states is not None:
                 hidden_states[i] = hidden
             x = self.activation(x)
-        x = self.output_linear(x)
-        x = self.reverse_embed(x)
+
+        x = x[:, -1, :]
         if hidden_states is not None:
             return x, hidden_states
         else:
             return x
 
-    def loss(self, predicted: torch.Tensor, target: torch.Tensor) -> torch.Tensor:
-        mse_loss = self.mse_loss_fn(predicted, target)
-        return mse_loss
+    def loss(self, batch: torch.Tensor, target: torch.Tensor, scaled_target: torch.Tensor, hidden_states=None) -> Union[
+            Tuple[torch.Tensor, Tuple], torch.Tensor]:
+        if hidden_states is not None:
+            intermediate, hidden_states = self.forward(batch, hidden_states)
+        else:
+            intermediate = self.forward(batch)
+
+        loss = torch.tensor(0.0)
+        continuous_outputs = self.output_linear(intermediate)
+        continuous_idx = 0
+        classification_idx = 0
+        for i in range(batch.shape[-1]):
+            if i in CATEGORICAL_VALUES:
+                # Cross entropy_loss
+                logits = self.classifications[classification_idx](intermediate)
+                target_class = target[:, i].long()
+                if CATEGORICAL_VALUES[i] == 2:
+                    target_class[:] -= 1
+
+                loss += self.classification_loss(logits, target_class)
+                classification_idx += 1
+            else:
+                # MSE loss
+                predicted = continuous_outputs[:, continuous_idx]
+                loss += self.mse_loss_fn(predicted, scaled_target[:, i])
+                continuous_idx += 1
+
+        if hidden_states is not None:
+            return loss, hidden_states
+        else:
+            return loss
 
     def embed(self, batch: torch.Tensor) -> torch.Tensor:
         if self.scalar is None:
@@ -82,29 +113,4 @@ class SwatPredictionModel(PredictionModel):
                     else:
                         new_batch[i, j, new_idx] = scaled[j, k]
                         new_idx += 1
-        return new_batch
-
-    def reverse_embed(self, batch: torch.Tensor) -> torch.Tensor:
-        new_batch = torch.zeros((batch.shape[0], batch.shape[1], batch.shape[2]
-                                 - len(CATEGORICAL_VALUES) * (self.embedding_size - 1)))
-        for i in range(len(batch)):
-            # Inverse transform?
-            for j in range(batch.shape[1]):
-                k = 0
-                embedding_idx = 0
-                new_idx = 0
-                while k < batch.shape[2]:
-                    if new_idx in CATEGORICAL_VALUES:
-                        sample = batch[i, j, k: k + self.embedding_size].clone().requires_grad_(True)
-                        distance = torch.norm(self.embeddings[embedding_idx].weight.data - sample, dim = 1)
-                        category = torch.argmin(distance)
-                        if CATEGORICAL_VALUES[new_idx] == 2:
-                            category += 1
-                        new_batch[i, j, new_idx] = category
-                        k += self.embedding_size
-                        embedding_idx += 1
-                    else:
-                        new_batch[i, j, new_idx] = batch[i, j, k].clone().requires_grad_(True)
-                        k += 1
-                    new_idx += 1
         return new_batch

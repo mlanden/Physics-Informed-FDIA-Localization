@@ -1,3 +1,5 @@
+import os
+
 import joblib
 from os import path
 import numpy as np
@@ -9,12 +11,14 @@ import matplotlib.pyplot as plt
 
 class SWATDataset(Dataset):
     """ Loads an Excel/csv file(s) with physical sensor/actuator readings from a water treatment system"""
+
     def __init__(self, conf, data_path, sequence_len, train, load_scaler):
         self.conf = conf
+
         if data_path.endswith(".xlsx"):
-            self.data = pd.read_excel(data_path, skiprows = 0, header = 1)
+            self.data = pd.read_excel(data_path, skiprows=0, header=1)
         elif data_path.endswith(".csv"):
-            self.data = pd.read_csv(data_path, skiprows = 0, header = 1)
+            self.data = pd.read_csv(data_path, skiprows=0, header=1)
 
         # for i in self.data:
         #     print(i, self.data[i].unique())
@@ -46,17 +50,17 @@ class SWATDataset(Dataset):
         i = 0
         while i < len(self.features) - self.sequence_len:
             seq = self.features[i: i + self.sequence_len, :]
-            target = self.scaled_features[i + self.sequence_len, :]
+            target = self.features[i + self.sequence_len, :]
             self.sequences.append(seq)
             self.targets.append(target)
             i += self.window_size
 
-        self.sequences = np.array(self.sequences, dtype = np.float32)
-        self.targets = np.array(self.targets, dtype = np.float32)
+        self.sequences = np.array(self.sequences, dtype=np.float32)
+        self.targets = np.array(self.targets, dtype=np.float32)
         print(f"Number of sequences: {len(self.sequences)}")
 
     def plot(self):
-        self.data.plot(kind = "scatter")
+        self.data.plot(kind="scatter")
         plt.show()
 
     def __len__(self):
@@ -69,6 +73,6 @@ class SWATDataset(Dataset):
         if self.train:
             return self.sequences[item], self.targets[item]
         else:
-            return (np.array(self.scaled_features[item, :], dtype = np.float32),
-                    np.array(self.scaled_features[item + 1, :], dtype = np.float32),
+            return (np.array(self.scaled_features[item, :], dtype=np.float32),
+                    np.array(self.scaled_features[item + 1, :], dtype=np.float32),
                     self.labels.iloc[item] == "Attack")

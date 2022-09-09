@@ -48,8 +48,8 @@ class Trainer:
             self._train()
         else:
             print(f"Launching {self.n_workers} trainers")
-            mp.spawn(launch_distributed, args = (self.n_workers, self._train),
-                     nprocs = self.n_workers)
+            mp.spawn(launch_distributed, args=(self.n_workers, self._train),
+                     nprocs=self.n_workers)
 
     def _train(self):
         datalen = len(self.dataset)
@@ -64,37 +64,35 @@ class Trainer:
 
         scalar = joblib.load(self.scalar_path)
         if not dist.is_initialized():
-            train_data = DataLoader(train_data, batch_size = self.batch_size, shuffle = True)
+            train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True)
             validation_data = DataLoader(validation_data)
         else:
-            train_sampler = DistributedSampler(train_data, num_replicas = self.n_workers,
-                                               rank = dist.get_rank(),
-                                               shuffle = True)
-            validation_sampler = DistributedSampler(validation_data, num_replicas = self.n_workers,
-                                                    rank = dist.get_rank())
-            train_data = DataLoader(train_data, batch_size = self.batch_size,
-                                    shuffle = False,
-                                    sampler = train_sampler)
-            validation_data = DataLoader(validation_data, sampler = validation_sampler)
+            train_sampler = DistributedSampler(train_data, num_replicas=self.n_workers,
+                                               rank=dist.get_rank(),
+                                               shuffle=True)
+            validation_sampler = DistributedSampler(validation_data, num_replicas=self.n_workers,
+                                                    rank=dist.get_rank())
+            train_data = DataLoader(train_data, batch_size=self.batch_size,
+                                    shuffle=False,
+                                    sampler=train_sampler)
+            validation_data = DataLoader(validation_data, sampler=validation_sampler)
             self.model = DDP(self.model)
 
+        print(self.model)
         if self.decay > 0:
-            optimizer = optim.Adam(self.model.parameters(), lr = self.learning_rate, weight_decay = self.decay)
+            optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.decay)
         else:
-            optimizer = optim.Adam(self.model.parameters(), lr = self.learning_rate)
+            optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
         writer = SummaryWriter("tf_board/" + self.checkpoint) if self.use_tensorboard else None
         start = time.time()
         for i in range(self.epochs):
             self.model.train()
-            count = 0
             epoch_loss = torch.tensor(0.0)
             for seq, target in train_data:
-                count += seq.shape[0]
-                predicted = self.model(seq)
-                predicted = predicted[:, -1, :]
-
-                loss = self.model.loss(predicted, target)
+                scaled_target = torch.as_tensor(scalar.transform(target), dtype=torch.float)
+                loss = self.model.loss(seq, target, scaled_target)
+                # print(loss)
                 optimizer.zero_grad()
                 loss.backward()
                 optimizer.step()
@@ -102,7 +100,7 @@ class Trainer:
                 epoch_loss += loss.item()
 
             if dist.is_initialized():
-                dist.reduce(epoch_loss, dst = 0)
+                dist.reduce(epoch_loss, dst=0)
 
             if self.use_tensorboard:
                 writer.add_scalar("Loss/train", epoch_loss.item(), i)
@@ -117,18 +115,18 @@ class Trainer:
 
                 val_loss /= len(validation_data)
                 if dist.is_initialized():
-                    dist.reduce(val_loss, dst = 0)
+                    dist.reduce(val_loss, dst=0)
                     val_loss /= self.n_workers
 
                 if self.use_tensorboard:
                     writer.add_scalar("Loss/validation", val_loss, i)
 
                 if not dist.is_initialized() or dist.get_rank() == 0:
-                    print(f"Epoch {i : 3d} Validation loss: {val_loss}", flush = True)
+                    print(f"Epoch {i : 3d} Validation loss: {val_loss}", flush=True)
 
             if i % 10 == 0 and (not dist.is_initialized() or dist.get_rank() == 0):
                 length = time.time() - start
-                print(f"Epoch {i :3d} / {self.epochs}: Loss: {epoch_loss}, {length} seconds", flush = True)
+                print(f"Epoch {i :3d} / {self.epochs}: Loss: {epoch_loss}, {length} seconds", flush=True)
                 torch.save(self.model, self.model_path)
 
         if not dist.is_initialized() or dist.get_rank() == 0:
@@ -155,9 +153,9 @@ class Trainer:
             error = torch.abs(predicted - target)
             errors.append(error)
 
-        errors = torch.concat(errors, dim = 0)
-        means = torch.mean(errors, dim = 0)
-        stds = torch.std(errors, dim = 0)
+        errors = torch.concat(errors, dim=0)
+        means = torch.mean(errors, dim=0)
+        stds = torch.std(errors, dim=0)
 
         obj = {
             "mean": means,
@@ -209,7 +207,6 @@ class Trainer:
                 diff = torch.abs(predicted - target).numpy().flatten()
                 print()
                 for i in range(len(score)):
-
                     print(i + 1, diff[i], normal_means[i].numpy())
 
                     # print(i, target[i], predicted[i])
