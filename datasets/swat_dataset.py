@@ -34,10 +34,9 @@ class SWATDataset(Dataset):
 
         if load_scaler:
             self.scaler = joblib.load(scale_file)
-            self.scaled_features = self.scaler.transform(self.features)
         else:
             self.scaler = StandardScaler()
-            self.scaled_features = self.scaler.fit_transform(self.features)
+            self.scaler.fit(self.features)
             joblib.dump(self.scaler, scale_file)
 
         if self.train:
@@ -59,20 +58,16 @@ class SWATDataset(Dataset):
         self.targets = np.array(self.targets, dtype=np.float32)
         print(f"Number of sequences: {len(self.sequences)}")
 
-    def plot(self):
-        self.data.plot(kind="scatter")
-        plt.show()
-
     def __len__(self):
         if self.train:
             return len(self.sequences)
         else:
-            return len(self.scaled_features) - 1
+            return len(self.features) - 1
 
     def __getitem__(self, item):
         if self.train:
             return self.sequences[item], self.targets[item]
         else:
-            return (np.array(self.scaled_features[item, :], dtype=np.float32),
-                    np.array(self.scaled_features[item + 1, :], dtype=np.float32),
+            return (np.array(self.features[item, :], dtype=np.float32),
+                    np.array(self.features[item + 1, :], dtype=np.float32),
                     self.labels.iloc[item] == "Attack")
