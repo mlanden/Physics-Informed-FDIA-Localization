@@ -19,23 +19,18 @@ from utils import launch_distributed
 
 
 class Trainer:
-    def __init__(self, conf: dict,
-                 dataset: torch.utils.data.Dataset,
-                 model: PredictionModel):
+    def __init__(self, conf: dict, dataset: torch.utils.data.Dataset):
         self.conf = conf
         self.dataset = dataset
-        self.model = model
-        self.loss_fn = None
-        if isinstance(model, SwatPredictionModel):
-            self.loss_fn = swat_loss
-        else:
-            raise RuntimeError("Unknown model type")
+        self.optimizer = None
+        self.model = None
 
         self.train_fraction = conf["train"]["train_fraction"]
         self.validate_fraction = conf["train"]["validate_fraction"]
         self.find_error_fraction = conf["train"]["find_error_fraction"]
         self.validation_frequency = conf["train"]["validation_frequency"]
         self.checkpoint = conf["train"]["checkpoint"]
+        self.load_checkpoint = conf["train"]["load_checkpoint"]
         self.batch_size = conf["train"]["batch_size"]
         self.learning_rate = conf["train"]["lr"]
         self.decay = conf["train"]["regularization"]
@@ -47,6 +42,37 @@ class Trainer:
         self.scalar_path = path.join("checkpoint", self.checkpoint, "scaler.gz")
         self.normal_behavior_path = path.join("checkpoint", self.checkpoint, "normal_behavior.pt")
         self.results_path = path.join("results", self.checkpoint, "detection.json")
+
+        self.loss_fn = None
+
+    def create_prediction_model(self, train=False):
+        epoch = 0
+        if self.load_checkpoint or not train:
+            info = torch.load(self.model_path)
+            self.model = info["model"]
+            self.optimizer = info["optimizer"]
+            epoch = info["epoch"]
+        else:
+            self.model = SwatPredictionModel(self.conf)
+
+            if self.decay > 0:
+                self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.decay)
+            else:
+                self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
+
+        if isinstance(self.model, SwatPredictionModel):
+            self.loss_fn = swat_loss
+        else:
+            raise RuntimeError("Unknown model type")
+        return epoch
+
+    def save_checkpoint(self, epoch):
+        info = {
+            "model": self.model,
+            "optimizer": self.optimizer,
+            "epoch": epoch
+        }
+        torch.save(info, self.model_path)
 
     def train_prediction(self):
         if self.n_workers == 1:
@@ -70,6 +96,7 @@ class Trainer:
         val_idx = list(range(train_len, train_len + val_len))
         validation_data = Subset(self.dataset, val_idx)
 
+        epoch = self.create_prediction_model(train=True)
         if not dist.is_initialized():
             train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True)
             validation_data = DataLoader(validation_data)
@@ -85,15 +112,9 @@ class Trainer:
             validation_data = DataLoader(validation_data, sampler=validation_sampler)
             self.model = DDP(self.model)
 
-        # print(self.model)
-        if self.decay > 0:
-            optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.decay)
-        else:
-            optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
-
         writer = SummaryWriter("tf_board/" + self.checkpoint) if self.use_tensorboard else None
         start = time.time()
-        for i in range(self.epochs):
+        for i in range(epoch + 1, self.epochs):
             if dist.is_initialized():
                 train_sampler.set_epoch(i)
             self.model.train()
@@ -105,9 +126,9 @@ class Trainer:
             for seq, target in loader:
                 loss = self.loss_fn(self.model, seq, target)
 
-                optimizer.zero_grad()
+                self.optimizer.zero_grad()
                 loss.backward()
-                optimizer.step()
+                self.optimizer.step()
 
                 epoch_loss += loss.item()
 
@@ -120,7 +141,7 @@ class Trainer:
             if not dist.is_initialized() or dist.get_rank() == 0:
                 length = time.time() - start
                 print(f"Epoch {i :3d} / {self.epochs}: Loss: {epoch_loss}, {length} seconds", flush=True)
-                torch.save(self.model, self.model_path)
+                self.save_checkpoint(i)
 
             if self.validation_frequency > 0 and (i + 1) % self.validation_frequency == 0:
                 self.model.eval()
@@ -151,6 +172,7 @@ class Trainer:
         idx = list(range(start, start + size))
         normal = Subset(self.dataset, idx)
         normal_data = DataLoader(normal)
+        self.create_prediction_model()
 
         losses = []
         with torch.no_grad():
@@ -173,6 +195,7 @@ class Trainer:
     def test(self):
         dataset = DataLoader(self.dataset)
         print(f"Number of samples: {len(dataset)}")
+        self.create_prediction_model()
 
         self.model.eval()
         obj = torch.load(self.normal_behavior_path)
@@ -189,7 +212,7 @@ class Trainer:
 
         hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
         step = 0
-        for features, target, attack in tqdm(dataset):
+        for features, target, attack in dataset:
             if attack_start > -1 and not attack:
                 attack_start = -1
                 if not attack_detected:
@@ -203,9 +226,9 @@ class Trainer:
 
             features = features.unsqueeze(0)
             with torch.no_grad():
-                loss, hidden_states = self.model.loss(features, target, hidden_states)
+                loss, hidden_states = self.loss_fn(self.model, features, target, hidden_states)
             score = torch.abs(loss - normal_means) / normal_stds
-            print(loss, normal_means, normal_stds, attack)
+            # print(loss, normal_means, normal_stds, attack)
 
             alarm = torch.any(score > 1)
             if attack_start == -1 and attack:
@@ -223,6 +246,7 @@ class Trainer:
                 else:
                     tn += 1
             step += 1
+            print(f"\r {step :5d} / {len(dataset)}: TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}", end="")
 
         tpr = tp / (tp + fn)
         tnr = tn / (tn + fp)
