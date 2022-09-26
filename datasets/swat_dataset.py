@@ -3,13 +3,13 @@ import os
 import joblib
 from os import path
 import numpy as np
-from torch.utils.data import Dataset
 import pandas as pd
 from sklearn.preprocessing import StandardScaler
-import matplotlib.pyplot as plt
+
+from .ics_dataset import ICSDataset
 
 
-class SWATDataset(Dataset):
+class SWATDataset(ICSDataset):
     """ Loads an Excel/csv file(s) with physical sensor/actuator readings from a water treatment system"""
 
     def __init__(self, conf, data_path, sequence_len, train, load_scaler):
@@ -71,3 +71,13 @@ class SWATDataset(Dataset):
             return (np.array(self.features[item, :], dtype=np.float32),
                     np.array(self.features[item + 1, :], dtype=np.float32),
                     self.labels.iloc[item] == "Attack")
+
+    def get_data(self):
+        return self.features, self.labels
+
+    def get_categorical_features(self):
+        # idx of value: number of possibilities
+        categorical_values = {2: 3, 3: 2, 4: 2, 9: 3, 10: 2, 11: 2, 12: 2, 13: 2, 14: 2, 15: 2, 19: 3, 20: 3, 21: 3,
+                              22: 3,
+                              23: 2, 24: 2, 29: 2, 30: 2, 31: 2, 32: 2, 33: 3, 42: 2, 43: 2, 48: 2, 49: 2, 50: 2}
+        return categorical_values

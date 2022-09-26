@@ -1,9 +1,15 @@
 import json
+import signal
+
 import joblib
 import time
 import os
 from os import path
 from tqdm import tqdm
+import matplotlib
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
+from sklearn.metrics import roc_curve
 
 import numpy as np
 import torch
@@ -14,7 +20,9 @@ from torch import optim
 from torch import multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 
+
 from models import *
+from datasets import *
 from utils import launch_distributed
 
 
@@ -41,7 +49,7 @@ class Trainer:
         self.model_path = path.join("checkpoint", self.checkpoint, "model.pt")
         self.scalar_path = path.join("checkpoint", self.checkpoint, "scaler.gz")
         self.normal_behavior_path = path.join("checkpoint", self.checkpoint, "normal_behavior.pt")
-        self.results_path = path.join("results", self.checkpoint, "detection.json")
+        self.results_path = path.join("results", self.checkpoint)
 
         self.loss_fn = None
 
@@ -53,22 +61,26 @@ class Trainer:
             self.optimizer = info["optimizer"]
             epoch = info["epoch"]
         else:
-            self.model = SwatPredictionModel(self.conf)
+            self.model = PredictionModel(self.conf, self.dataset)
 
             if self.decay > 0:
                 self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.decay)
             else:
                 self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
-        if isinstance(self.model, SwatPredictionModel):
+        if isinstance(self.dataset, SWATDataset):
             self.loss_fn = swat_loss
         else:
             raise RuntimeError("Unknown model type")
         return epoch
 
     def save_checkpoint(self, epoch):
+        if isinstance(self.model, DDP):
+            model = self.model.module
+        else:
+            model = self.model
         info = {
-            "model": self.model,
+            "model": model,
             "optimizer": self.optimizer,
             "epoch": epoch
         }
@@ -80,9 +92,10 @@ class Trainer:
         else:
             print(f"Launching {self.n_workers} trainers")
             mp.spawn(launch_distributed, args=(self.n_workers, self._train),
-                     nprocs=self.n_workers)
+                     nprocs=self.n_workers, start_method="fork")
 
     def _train(self):
+        signal.signal(signal.SIGINT, quit)
         train_sampler = None
         validation_sampler = None
         datalen = len(self.dataset)
@@ -97,6 +110,7 @@ class Trainer:
         validation_data = Subset(self.dataset, val_idx)
 
         epoch = self.create_prediction_model(train=True)
+        print(self.model)
         if not dist.is_initialized():
             train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True)
             validation_data = DataLoader(validation_data)
@@ -119,12 +133,15 @@ class Trainer:
                 train_sampler.set_epoch(i)
             self.model.train()
             epoch_loss = torch.tensor(0.0)
+
             if not dist.is_initialized() or dist.get_rank() == 0:
                 loader = tqdm(train_data)
+                print(f"Epoch {i :3d} / {self.epochs}", flush=True)
             else:
                 loader = train_data
             for seq, target in loader:
-                loss = self.loss_fn(self.model, seq, target)
+                losses = self.loss_fn(self.model, seq, target)
+                loss = torch.sum(losses)
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -140,15 +157,17 @@ class Trainer:
 
             if not dist.is_initialized() or dist.get_rank() == 0:
                 length = time.time() - start
-                print(f"Epoch {i :3d} / {self.epochs}: Loss: {epoch_loss}, {length} seconds", flush=True)
+                print(f"Loss: {epoch_loss / len(loader)}, {length} seconds", flush=True)
                 self.save_checkpoint(i)
 
-            if self.validation_frequency > 0 and (i + 1) % self.validation_frequency == 0:
+            if self.validation_frequency > 0 and i % self.validation_frequency == 0:
                 self.model.eval()
                 val_loss = torch.tensor(0.0)
-                validation_sampler.set_epoch(i)
+                if validation_sampler is not None:
+                    validation_sampler.set_epoch(i)
                 for seq, target in validation_data:
-                    loss = self.loss_fn(self.model, seq, target)
+                    losses = self.loss_fn(self.model, seq, target)
+                    loss = torch.sum(losses)
                     val_loss += loss.detach()
 
                 val_loss /= len(validation_data)
@@ -174,17 +193,22 @@ class Trainer:
         normal_data = DataLoader(normal)
         self.create_prediction_model()
 
-        losses = []
+        loss_vectors = []
         with torch.no_grad():
             hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
             for features, target in tqdm(normal_data):
-                loss, hidden_states = self.loss_fn(self.model, features, target, hidden_states)
-                losses.append(loss)
+                losses, hidden_states = self.loss_fn(self.model, features, target, hidden_states)
+                # losses = torch.sum(losses)
+                # print(losses)
+                loss_vectors.append(losses.view(1, -1))
 
-        losses = np.array(losses)
-        means = np.mean(losses)
-        stds = np.std(losses)
+        loss_vectors = torch.concat(loss_vectors, 0)
+        means = torch.mean(loss_vectors, 0).numpy().flatten()
+        stds = torch.std(loss_vectors, 0).numpy().flatten()
+        print(means)
+        print(stds)
 
+        self.plot_loss_dist(means, stds)
         obj = {
             "mean": means,
             "std": stds
@@ -206,6 +230,8 @@ class Trainer:
         fp = 0
         fn = 0
         delays = []
+        scores = []
+        labels = []
 
         attack_start = -1
         attack_detected = False
@@ -213,6 +239,8 @@ class Trainer:
         hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
         step = 0
         for features, target, attack in dataset:
+            # if step == 5000:
+            #     break
             if attack_start > -1 and not attack:
                 attack_start = -1
                 if not attack_detected:
@@ -226,11 +254,17 @@ class Trainer:
 
             features = features.unsqueeze(0)
             with torch.no_grad():
-                loss, hidden_states = self.loss_fn(self.model, features, target, hidden_states)
-            score = torch.abs(loss - normal_means) / normal_stds
+                losses, hidden_states = self.loss_fn(self.model, features, target, hidden_states)
+                # losses = torch.sum(losses)
+            score = torch.abs(losses - normal_means) / normal_stds
+            # print(losses[36], normal_means[36], normal_stds[36])
+            print(score)
+            # quit()
+            # scores.append(score.item())
+            labels.append(1 if attack else 0)
             # print(loss, normal_means, normal_stds, attack)
-
-            alarm = torch.any(score > 1)
+            print(torch.argmax(score))
+            alarm = torch.any(score > 3)
             if attack_start == -1 and attack:
                 attack_start = step
 
@@ -246,15 +280,19 @@ class Trainer:
                 else:
                     tn += 1
             step += 1
-            print(f"\r {step :5d} / {len(dataset)}: TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}", end="")
+            msg = f"{step :5d} / {len(dataset)}: TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}"
+            if len(delays) > 0:
+                msg += f", Dwell: {np.mean(delays)}"
+            print(f"\r", msg, end="")
+        print()
 
         tpr = tp / (tp + fn)
         tnr = tn / (tn + fp)
         fpr = fp / (fp + tn)
         fnr = fn / (fn + tp)
 
-        print(f"True positive: {tpr * 100 :3.2f}")
-        print(f"True negative: {tnr * 100 :3.2f}")
+        print(f"True Positive: {tpr * 100 :3.2f}")
+        print(f"True Negative: {tnr * 100 :3.2f}")
         print(f"False Positive: {fpr * 100 :3.2f}")
         print(f"False Negatives: {fnr * 100 :3.2f}")
 
@@ -263,7 +301,30 @@ class Trainer:
             "tn": tn,
             "fp": fp,
             "fn": fn,
-            "delay": delays
+            "delay": delays,
+            "scores": scores,
+            "labels": labels
         }
-        with open(self.results_path, "w") as fd:
+        with open(path.join(self.results_path, "detection.json"), "w") as fd:
             json.dump(results, fd)
+
+        # fpr, tpr, thresholds = roc_curve(labels, scores)
+        #
+        # fig, ax = plt.subplots()
+        #
+        # ax.plot(fpr, tpr)
+        # ax.set(xlabel="False Positive Rate",
+        #        ylabel="True Positive Rate",
+        #        title="ROC Curve")
+        # plt.savefig(path.join(self.results_path, "roc.png"))
+
+    def plot_loss_dist(self, means, stds):
+        fig, (mean_ax, std_ax) = plt.subplots(1, 2)
+        mean_ax.hist(means)
+        std_ax.hist(stds)
+        mean_ax.set(title="Mean Losses",
+                    ylabel="Mean Loss")
+        std_ax.set(title="Standard Deviation Losses",
+                   ylabel="Standard Deviation Loss")
+        plt.tight_layout()
+        plt.savefig(path.join(self.results_path, "hists.png"))
