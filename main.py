@@ -29,8 +29,8 @@ if __name__ == '__main__':
                               sequence_len=conf["model"]["sequence_length"],
                               train=True,
                               load_scaler=False)
-        # generate_predicates(dataset, conf)
-        # quit()
+        generate_predicates(dataset, conf)
+        quit()
         trainer = Trainer(conf, dataset)
         trainer.train_prediction()
     elif task == "error":

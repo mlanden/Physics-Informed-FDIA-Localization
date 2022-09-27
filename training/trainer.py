@@ -257,14 +257,11 @@ class Trainer:
                 losses, hidden_states = self.loss_fn(self.model, features, target, hidden_states)
                 # losses = torch.sum(losses)
             score = torch.abs(losses - normal_means) / normal_stds
-            # print(losses[36], normal_means[36], normal_stds[36])
-            print(score)
-            # quit()
+
             # scores.append(score.item())
             labels.append(1 if attack else 0)
             # print(loss, normal_means, normal_stds, attack)
-            print(torch.argmax(score))
-            alarm = torch.any(score > 3)
+            alarm = torch.any(score > 2)
             if attack_start == -1 and attack:
                 attack_start = step
 
@@ -282,7 +279,7 @@ class Trainer:
             step += 1
             msg = f"{step :5d} / {len(dataset)}: TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}"
             if len(delays) > 0:
-                msg += f", Dwell: {np.mean(delays)}"
+                msg += f", Dwell: {np.mean(delays):.3f}"
             print(f"\r", msg, end="")
         print()
 
