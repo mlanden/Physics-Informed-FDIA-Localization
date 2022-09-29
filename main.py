@@ -5,7 +5,7 @@ import sys
 
 from datasets import SWATDataset
 from training import Trainer
-from invariants import generate_predicates
+from invariants import generate_predicates, mine_invariants
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -29,7 +29,8 @@ if __name__ == '__main__':
                               sequence_len=conf["model"]["sequence_length"],
                               train=True,
                               load_scaler=False)
-        generate_predicates(dataset, conf)
+        predicates = generate_predicates(dataset, conf)
+        mine_invariants(predicates, dataset, conf)
         quit()
         trainer = Trainer(conf, dataset)
         trainer.train_prediction()
