@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from .predicate import Predicate
@@ -44,5 +45,9 @@ class DistributionPredicate(Predicate):
         return self.hash
 
     def __eq__(self, other):
-        return self.means == other.means and self.variances == other.variances and self.weights == other.weights and\
-            self.state_idx == other.state_idx and self.distribution_idx == other.distribution_idx
+        if not isinstance(other, DistributionPredicate):
+            return False
+
+        return np.all(self.means == other.means) and np.all(self.variances == other.variances) and \
+               np.all(self.weights == other.weights) and np.all(self.state_idx == other.state_idx) and \
+               np.all(self.distribution_idx == other.distribution_idx)

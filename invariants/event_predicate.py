@@ -1,4 +1,5 @@
 import torch
+import numpy as np
 
 from .predicate import Predicate
 
@@ -61,5 +62,8 @@ class EventPredicate(Predicate):
         return self.hash
 
     def __eq__(self, other):
-        return self.coefficients == other.coefficients and self.bias == other.bias and self.target_idx == \
+        if not isinstance(other, EventPredicate):
+            return False
+
+        return np.all(self.coefficients == other.coefficients) and self.bias == other.bias and self.target_idx == \
                other.target_idx and self.positive_error == other.positive_error

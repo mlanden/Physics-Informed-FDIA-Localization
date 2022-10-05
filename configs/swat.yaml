@@ -36,3 +36,4 @@ train:
   event_predicate_error: 0.01
   gamma: 0.9
   theta: 0.08
+  max_depth: 4
