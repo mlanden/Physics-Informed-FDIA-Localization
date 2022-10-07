@@ -1,6 +1,13 @@
+import time
+import queue
 from typing import List, Tuple
 from collections import defaultdict
+import multiprocessing as mp
+
+import numpy as np
 import torch
+import pickle
+from os import path
 import matplotlib
 
 matplotlib.use("agg")
@@ -12,9 +19,36 @@ from datasets import ICSDataset
 from utils import cfp_growth, MISTree
 
 
-def mine_invariants(predicates: List[Predicate], dataset: ICSDataset, conf: dict):
+def mine_invariants(dataset: ICSDataset, conf: dict):
+    mp.set_start_method("spawn", force=True)
+    checkpoint = conf["train"]["checkpoint"]
+    load_checkpoint = conf["train"]["load_checkpoint"]
+    predicate_path = path.join("checkpoint", checkpoint, "predicates.pkl")
+    if not path.exists(predicate_path):
+        raise RuntimeError("No predicates found, create them first")
+    n_workers = conf["train"]["n_workers"]
+
+    with open(predicate_path, "rb") as fd:
+        predicates = pickle.load(fd)
+    print(f"Loaded {len(predicates)} predicates")
+
     index_to_predicate, predicate_to_index = create_mappings(predicates)
-    predicate_counts, predicates_satisfied = assign_predicates(predicates, dataset)
+    assign_path = path.join("checkpoint", checkpoint, "assigned_predicates.pkl")
+    count_path = path.join("checkpoint", checkpoint, "count_predicates.pkl")
+
+    if path.exists(assign_path) and load_checkpoint:
+        with open(assign_path, "rb") as fd:
+            predicates_satisfied = pickle.load(fd)
+        with open(count_path, "rb") as fd:
+            predicate_counts = pickle.load(fd)
+    else:
+        predicate_counts, predicates_satisfied = assign_predicates(predicates, dataset, n_workers)
+        with open(assign_path, "wb") as fd:
+            pickle.dump(predicates_satisfied, fd)
+        with open(count_path, "wb") as fd:
+            pickle.dump(predicate_counts, fd)
+
+    print("Predicates assigned")
     features, labels = dataset.get_data()
 
     min_supports = {}
@@ -25,20 +59,23 @@ def mine_invariants(predicates: List[Predicate], dataset: ICSDataset, conf: dict
     for i, predicate in enumerate(predicates):
         min_supports[i] = max(local_min_support * predicate_counts[i], len(features) *
                               global_min_support)
-
+    print("Mean min support", np.mean(list(min_supports.values())))
     print("Starting to build predicate sets")
+    start = time.time()
     freq_patterns, pattern_counts, tree = cfp_growth(features, predicates_satisfied, min_supports, max_depth)
-    lengths = [len(p) for p in freq_patterns]
-    fig, ax = plt.subplots()
-    ax.hist(lengths)
-    plt.tight_layout()
-    plt.savefig("predicate_lengths.png")
-    print("Predicate sets built")
+    length = time.time() - start
+    print(f"{len(freq_patterns)} predicate sets built in {length} seconds")
 
+    print("Starting find closed sets")
+    start = time.time()
     closed_sets = find_closed_predicate_sets(freq_patterns, pattern_counts, predicate_counts,
-                                             min(min_supports.values()))
+                                             min(min_supports.values()), n_workers)
+    length = time.time() - start
+    print(f"Found {len(closed_sets)} closed sets in {length} seconds")
+
     rules = generate_rules(closed_sets, predicate_counts, tree)
     print("Number of rules:", len(rules))
+
     invariants = create_invariant_objs(rules, index_to_predicate)
     return invariants
 
@@ -46,7 +83,9 @@ def mine_invariants(predicates: List[Predicate], dataset: ICSDataset, conf: dict
 def generate_rules(closed_sets, predicate_counts, tree, min_confidence=1):
     rules = []
     for i in range(2, len(closed_sets)):
-        for freq_sets in closed_sets[i]:
+        print(f"Generating rules for {i} / {len(closed_sets)} closed sets")
+        for j, freq_sets in enumerate(closed_sets[i]):
+            print(f"Running through {j} / {len(closed_sets[i])} frequent patterns")
             predicates = [frozenset([item]) for item in freq_sets]
             if i == 1:
                 compute_confidence(freq_sets, predicates, tree, predicate_counts, rules, min_confidence)
@@ -55,25 +94,8 @@ def generate_rules(closed_sets, predicate_counts, tree, min_confidence=1):
     return rules
 
 
-def assign_predicates(predicates: List[Predicate], dataset: ICSDataset) -> Tuple[dict, dict]:
-    """Determine which states satisfy each predicate"""
-    features, labels = dataset.get_data()
-    predicate_counts = {}
-
-    # The predicates satisfied in each state
-    predicates_satisfied = defaultdict(list)
-    for i, predicate in enumerate(predicates):
-        total = 0
-        for state in features:
-            if predicate.is_satisfied(torch.tensor(state)):
-                predicates_satisfied[tuple(state)].append(i)
-                total += 1
-        predicate_counts[i] = total
-
-    return predicate_counts, predicates_satisfied
-
-
-def find_closed_predicate_sets(predicate_sets, set_counts, predicate_counts, min_support):
+def find_closed_predicate_sets(predicate_sets: List[frozenset], set_counts: dict, predicate_counts: dict,
+                               min_support: dict, n_workers: int):
     pattern_sizes = defaultdict(list)
     for item in predicate_counts:
         if predicate_counts[item] >= min_support:
@@ -85,21 +107,67 @@ def find_closed_predicate_sets(predicate_sets, set_counts, predicate_counts, min
         pattern_sizes[len(pattern) - 1].append(frozenset(pattern))
 
     closed_sets = []
-    for i in range(len(pattern_sizes) - 1):
-        closed = []
-        prev_sets = pattern_sizes[i]
-        next_sets = pattern_sizes[i + 1]
-        for prev_set in prev_sets:
-            valid = True
-            for next_set in next_sets:
-                if prev_set.issubset(next_set) and set_counts[prev_set] == set_counts[next_set]:
-                    valid = False
-                    break
-            if valid:
-                closed.append(prev_set)
-        closed_sets.append(closed)
-    closed_sets.append(pattern_sizes[-1])
+    if n_workers > 1:
+        tasks, results = mp.JoinableQueue(), mp.JoinableQueue()
+        work_events = [mp.Event() for _ in range(n_workers)]
+
+        for i in range(len(pattern_sizes) - 1):
+            closed_sets.append([])
+            prev_sets = pattern_sizes[i]
+            for prev_set in prev_sets:
+                tasks.put((prev_set, i + 1))
+
+        handle = mp.spawn(_closed_sets_worker, args=(pattern_sizes, tasks, results, work_events),
+                          nprocs=n_workers, join=False)
+        done = False
+        while results.qsize() > 0 or not done:
+            try:
+                set_, i, is_closed = results.get(timeout=0.1)
+                if is_closed:
+                    closed_sets[i - 1].append(set_)
+                results.task_done()
+
+                done = True
+                for e in work_events:
+                    if not e.is_set():
+                        done = False
+            except queue.Empty:
+                pass
+        tasks.join()
+        results.join()
+        handle.join()
+    else:
+        print("Pattern sizes", len(pattern_sizes))
+        for i in range(len(pattern_sizes) - 1):
+            start = time.time()
+            closed = []
+            prev_sets = pattern_sizes[i]
+            next_sets = pattern_sizes[i + 1]
+            for prev_set in prev_sets:
+                valid = True
+                for next_set in next_sets:
+                    if prev_set.issubset(next_set) and set_counts[prev_set] == set_counts[next_set]:
+                        valid = False
+                        break
+                if valid:
+                    closed.append(prev_set)
+            closed_sets.append(closed)
+            length = time.time() - start
+            print(f"Closed sets {i} took {length} seconds with {len(prev_sets)}, {len(next_sets)} sets")
+        closed_sets.append(pattern_sizes[-1])
     return closed_sets
+
+
+def _closed_sets_worker(rank: int, pattern_sizes: dict, tasks: mp.Queue, results: mp.Queue, work_completed_events: List[mp.Event], set_counts: dict):
+    while tasks.qsize() > 0:
+        prev_set, i = tasks.get(timeout=0.1)
+        for next_set in pattern_sizes[i]:
+            is_closed = prev_set.issubset(next_set) and set_counts[prev_set] == set_counts[next_set]
+            results.put((prev_set, i, is_closed))
+            tasks.task_done()
+            if rank == 0:
+                print(f"{tasks.qsize()} more tasks", flush=True)
+    work_completed_events[rank].set()
 
 
 def compute_confidence(freq_set, predicates: list, tree: MISTree, pattern_counts: dict, rules: list,
@@ -112,10 +180,12 @@ def compute_confidence(freq_set, predicates: list, tree: MISTree, pattern_counts
             pattern_counts[antecedent] = tree.support(list(antecedent))
 
         confidence = pattern_counts[freq_set] / pattern_counts[antecedent]
+        print(confidence)
         if confidence >= min_confidence:
             rules.append((antecedent, consequence, confidence))
             rule_sets.append(consequence)
-        return rule_sets
+    print("rule sets", len(rule_sets))
+    return rule_sets
 
 
 def create_apriori_sets(sets, k):
@@ -158,3 +228,73 @@ def create_mappings(predicates):
         index_to_predicate[i] = predicates[i]
         predicate_to_index[predicates[i]] = i
     return index_to_predicate, predicate_to_index
+
+
+def assign_predicates(predicates: List[Predicate], dataset: ICSDataset, n_workers=1) -> Tuple[dict, dict]:
+    """Determine which states satisfy each predicate"""
+    features, labels = dataset.get_data()
+    predicate_counts = {}
+    for p in range(len(predicates)):
+        predicate_counts[p] = 0
+    predicates_satisfied = {}
+    if n_workers > 1:
+        task_queue, result_queue = mp.JoinableQueue(), mp.JoinableQueue()
+        events = [mp.Event() for _ in range(n_workers)]
+        for state in features:
+            task_queue.put(state)
+        workers = [mp.Process(target=_assign_predicates, args=(i, predicates, task_queue, result_queue, events)) for i in range(n_workers)]
+        for worker in workers:
+            worker.start()
+
+        done = False
+        i = 0
+        while result_queue.qsize() > 0 or not done:
+            try:
+                state, predicates_result = result_queue.get(timeout=1)
+                predicates_satisfied[tuple(state)] = predicates_result
+                for i in predicates_result:
+                    predicate_counts[i] += 1
+                result_queue.task_done()
+                i += 1
+                if i % 10 == 0:
+                    print(f"Assigned {i} / {len(features)} states", flush=True)
+
+                done = True
+                for e in events:
+                    if not e.is_set():
+                        done = False
+            except queue.Empty:
+                pass
+        task_queue.join()
+        result_queue.join()
+        for worker in workers:
+            worker.join()
+    else:
+        for i, state in enumerate(features):
+            predicates_result = count_predicate_satisfied(predicates, torch.as_tensor(state))
+            predicates_satisfied[tuple(state)] = predicates_result
+            for i in predicates_result:
+                predicate_counts[i] += 1
+            print(f"Assigned {i:5d} / {len(features)} states", end="\r", flush=True)
+    return dict(predicate_counts), predicates_satisfied
+
+
+def _assign_predicates(rank: int, predicates: List[Predicate], tasks: mp.JoinableQueue, results: mp.JoinableQueue,
+                       work_completed_events: List[mp.Event]):
+    while tasks.qsize() > 0:
+        state = tasks.get(timeout=1)
+        predicates_satisfied = count_predicate_satisfied(predicates, state)
+        results.put((state, predicates_satisfied))
+        tasks.task_done()
+    results.close()
+    work_completed_events[rank].set()
+
+
+def count_predicate_satisfied(predicates: List[Predicate], state: torch.Tensor):
+    predicates_satisfied = []
+    for i, predicate in enumerate(predicates):
+        if type(state) is not torch.Tensor:
+            state = torch.as_tensor(state)
+        if predicate.is_satisfied(state):
+            predicates_satisfied.append(i)
+    return predicates_satisfied

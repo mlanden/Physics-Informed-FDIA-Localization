@@ -29,9 +29,6 @@ if __name__ == '__main__':
                               sequence_len=conf["model"]["sequence_length"],
                               train=True,
                               load_scaler=False)
-        predicates = generate_predicates(dataset, conf)
-        mine_invariants(predicates, dataset, conf)
-        quit()
         trainer = Trainer(conf, dataset)
         trainer.train_prediction()
     elif task == "error":
@@ -48,11 +45,17 @@ if __name__ == '__main__':
                               load_scaler=True)
         trainer = Trainer(conf, dataset)
         trainer.test()
-    elif task == "plot":
+    elif task == "predicates":
         dataset = SWATDataset(conf, conf["data"]["normal"],
-                              sequence_len=1,
-                              train=False,
+                              sequence_len=conf["model"]["sequence_length"],
+                              train=True,
                               load_scaler=False)
-        dataset.plot()
+        predicates = generate_predicates(dataset, conf)
+    elif "invariants":
+        dataset = SWATDataset(conf, conf["data"]["normal"],
+                              sequence_len=conf["model"]["sequence_length"],
+                              train=True,
+                              load_scaler=False)
+        mine_invariants(dataset, conf)
     else:
         raise RuntimeError(f"Unknown task: {task}")

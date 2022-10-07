@@ -24,7 +24,7 @@ class EventPredicate(Predicate):
 
             if i != self.target_idx:
                 total += self.coefficients[continuous_idx] * state[i]
-            continuous_idx += 1
+                continuous_idx += 1
 
         if self.positive_error:
             total += self.epsilon
@@ -54,11 +54,10 @@ class EventPredicate(Predicate):
         if self.hash is None:
             hash_ = []
             hash_.extend(self.coefficients)
-            hash_.extend(self.bias)
+            hash_.append(self.bias)
             hash_.append(self.target_idx)
             hash_.append(self.positive_error)
             self.hash = hash(tuple(hash_))
-            print("event", type(self.hash))
         return self.hash
 
     def __eq__(self, other):

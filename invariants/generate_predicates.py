@@ -36,7 +36,7 @@ def generate_predicates(dataset: ICSDataset, conf: dict) -> List[Predicate]:
 
         print(f"Distribution predicates: {len(distribution_predicates)}")
         print(f"Event predicates: {len(event_predicates)}")
-        print(f"Generated {len(predicates)} predicates")
+        print(f"Generated {len(predicates)} predicates. Saved to {checkpoint}")
 
         with open(checkpoint, "wb") as fd:
             pickle.dump(predicates, fd)

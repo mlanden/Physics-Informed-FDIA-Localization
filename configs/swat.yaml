@@ -1,7 +1,8 @@
-task: "train"
+#task: "train"
 #task: "error"
 #task: "test"
-#task: "plot"
+#task: "predicates"
+task: "invariants"
 data:
 #  normal: "../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv"
   normal: "../Datasets/SWAT/First_Hour_2015.csv"
@@ -19,13 +20,13 @@ model:
   window_size: 20
 
 train:
-  n_workers: 1
+  n_workers: 2
   batch_size: 64
   epochs: 100
   lr: 0.0005
   regularization: 0.00001
-  checkpoint: "swat_2015_small"
-  load_checkpoint: 1
+  checkpoint: "swat_2015"
+  load_checkpoint: 0
   tensorboard: 1
   train_fraction: 0.4
   validate_fraction: 0.1
@@ -34,6 +35,6 @@ train:
 
   max_gmm_components: 5
   event_predicate_error: 0.01
-  gamma: 0.9
+  gamma: 1.0
   theta: 0.08
   max_depth: 4
