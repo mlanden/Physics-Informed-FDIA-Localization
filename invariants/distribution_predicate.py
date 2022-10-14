@@ -6,8 +6,9 @@ from .predicate import Predicate
 
 class DistributionPredicate(Predicate):
 
-    def __init__(self, means, variances, weights, state_idx, continuous_idx, distribution_idx):
+    def __init__(self, means, variances, weights, threshold, state_idx, continuous_idx, distribution_idx):
         super().__init__()
+        self.threshold = threshold
         self.continuous_idx = continuous_idx
         self.means = means
         self.variances = variances
@@ -21,7 +22,7 @@ class DistributionPredicate(Predicate):
         for i in range(len(self.distributions)):
             log_prob = self.distributions[i].log_prob(state[self.state_idx])
             membership_probabilities[i] = self.weights[i] * log_prob
-        return torch.argmax(membership_probabilities) == self.distribution_idx
+        return membership_probabilities[self.distribution_idx] >= self.threshold
 
     def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
         continuous_outputs = network_outputs[1]

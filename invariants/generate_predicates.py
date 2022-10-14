@@ -51,6 +51,7 @@ def _generate_distribution_predicates(dataset: ICSDataset, conf: dict) -> List[P
 
     predicates = []
     max_components = conf["train"]["max_gmm_components"]
+    distribution_threshold = conf["train"]["distribution_threshold"]
     continuous_idx = 0
     for feature in range(features.shape[-1]):
         if feature in categorical_values:
@@ -69,11 +70,13 @@ def _generate_distribution_predicates(dataset: ICSDataset, conf: dict) -> List[P
                 max_score = bic
                 best_model = gmm
 
+        scores = best_model.score_samples(train_data)
+        threshold = scores.min() * distribution_threshold
         means = best_model.means_.flatten()
         variances = best_model.covariances_.flatten()
         weights = best_model.weights_
         for i in range(len(means)):
-            predicates.append(DistributionPredicate(means, variances, weights, feature, continuous_idx, i))
+            predicates.append(DistributionPredicate(means, variances, weights, threshold, feature, continuous_idx, i))
         continuous_idx += 1
 
     return predicates
@@ -108,9 +111,8 @@ def _generate_event_predicates(dataset: ICSDataset, conf: dict) -> List[Predicat
 
                     y_pred = model.predict(x)
                     error = np.abs(y - y_pred)
-                    # print(f"Actuator: {actuator}, target feature: {target_feature}, support: {len(y)},"
-                    #       f" error: {np.max(error)}")
                     if np.max(error) < epsilon:
+                        print()
                         plus_predicate = EventPredicate(model.coef_, model.intercept_, target_feature, epsilon, True,
                                                         continuous_features)
                         predicates.append(plus_predicate)

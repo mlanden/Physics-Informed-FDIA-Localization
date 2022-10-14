@@ -1,20 +1,20 @@
-#task: "train"
-#task: "error"
-#task: "test"
-#task: "predicates"
-task: "invariants"
+#task: train
+#task: error
+#task: test
+#task: predicates
+task: invariants
 data:
-#  normal: "../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv"
-  normal: "../Datasets/SWAT/First_Hour_2015.csv"
-#  normal: "C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv"
-#  normal: "C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv"
-  attack: "../Datasets/SWAT/SWaT_Dataset_Attack_v0.csv"
-#  attack: "C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Attack_v0.csv"
+  normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
+#  normal: ../Datasets/SWAT/First_Hour_2015.csv
+#  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
+#  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
+  attack: ../Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
+#  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
   n_features: 51
 
 model:
   hidden_layers: [100, 100]
-  activation: "leakyRelu"
+  activation: leakyRelu
   embedding_size: 0
   sequence_length: 5
   window_size: 20
@@ -25,8 +25,9 @@ train:
   epochs: 100
   lr: 0.0005
   regularization: 0.00001
-  checkpoint: "swat_2015"
-  load_checkpoint: 0
+  checkpoint: swat_2015_full
+  load_checkpoint: 1
+
   tensorboard: 1
   train_fraction: 0.4
   validate_fraction: 0.1
@@ -34,7 +35,9 @@ train:
   validation_frequency: 10
 
   max_gmm_components: 5
+  distribution_threshold: 1.01
   event_predicate_error: 0.01
-  gamma: 1.0
-  theta: 0.08
-  max_depth: 4
+  gamma: 0.008
+  theta: 0.0005
+  max_depth: 5
+  max_sets: 500000

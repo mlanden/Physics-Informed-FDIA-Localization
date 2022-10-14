@@ -28,10 +28,10 @@ class EventPredicate(Predicate):
 
         if self.positive_error:
             total += self.epsilon
-            return state[self.target_idx] > total
+            return state[self.target_idx] < total
         else:
             total -= self.epsilon
-            return state[self.target_idx] < total
+            return state[self.target_idx] > total
 
     def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
         continuous_output = network_outputs[1]
