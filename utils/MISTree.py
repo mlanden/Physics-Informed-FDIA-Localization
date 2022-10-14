@@ -241,10 +241,8 @@ def cfp_growth(database, items_satisfied, min_supports, max_depth, max_sets):
         cmin_support = tree.table.min_support[item]
         if tree.table.support[item] >= cmin_support:
             conditional_tree, conditional_pattern_bases = conditional_mis_tree(tree, item, [item], min_supports,
-                                                                               cmin_support, -1)
+                                                                               cmin_support, pattern_counts, -1)
             freq_patterns.extend(conditional_pattern_bases)
-            for pattern in conditional_pattern_bases:
-                pattern_counts[frozenset(pattern)] += 1
             if len(freq_patterns) >= max_sets:
                 break
 
@@ -261,10 +259,8 @@ def cfp_growth_helper(tree, pattern_base, cmin_support, min_supports, freq_patte
         new_pattern_base = list(pattern_base)
         new_pattern_base.insert(0, item)
         conditional_tree, conditional_pattern_bases = conditional_mis_tree(tree, item, new_pattern_base, min_supports,
-                                                                           cmin_support, depth)
+                                                                           cmin_support, pattern_counts, depth)
         freq_patterns.extend(conditional_pattern_bases)
-        for pattern in conditional_pattern_bases:
-            pattern_counts[frozenset(pattern)] += 1
         if len(freq_patterns) >= max_sets:
             return
 
@@ -273,7 +269,7 @@ def cfp_growth_helper(tree, pattern_base, cmin_support, min_supports, freq_patte
                               pattern_counts, max_depth, depth + 1)
 
 
-def conditional_mis_tree(tree, item, pattern_base, min_supports, cmin_support, depth):
+def conditional_mis_tree(tree, item, pattern_base, min_supports, cmin_support, pattern_counts, depth):
     pattern_bases = []
     for start_node in tree.table.node_list[item]:
         pattern = []
@@ -286,14 +282,15 @@ def conditional_mis_tree(tree, item, pattern_base, min_supports, cmin_support, d
 
     conditional_tree = MISTree()
     conditional_tree.build_conditional(pattern_bases, min_supports)
-    conditional_tree.conditional_prune(cmin_support)
-
     conditional_pattern_bases = []
-    for i in conditional_tree.table.support:
-        if conditional_tree.table.support[i] >= cmin_support:
-            pattern = list(pattern_base)
-            pattern.insert(0, i)
+    for item in conditional_tree.table.support:
+        pattern = list(pattern_base)
+        pattern.insert(0, item)
+        pattern_counts[frozenset(pattern)] = conditional_tree.table.support[item]
+        if conditional_tree.table.support[item] >= cmin_support:
             conditional_pattern_bases.append(pattern)
+
+    conditional_tree.conditional_prune(cmin_support)
 
     return conditional_tree, conditional_pattern_bases
 

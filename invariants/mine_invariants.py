@@ -88,8 +88,6 @@ def mine_invariants(dataset: ICSDataset, conf: dict):
                                                          max_depth, max_sets)
         length = time.time() - start
         print(f"{len(freq_patterns)} predicate sets built in {length} seconds")
-        print(tree)
-        quit()
 
         print("Starting find closed sets")
         closed_sets = find_closed_predicate_sets(freq_patterns, pattern_counts, predicate_counts,
@@ -236,7 +234,6 @@ def compute_confidence(freq_set, predicates: list, tree: MISTree, pattern_counts
         if confidence >= min_confidence:
             rules.append((antecedent, consequence, confidence))
             rule_sets.append(consequence)
-    print("rule sets", len(rule_sets))
     return rule_sets
 
 
