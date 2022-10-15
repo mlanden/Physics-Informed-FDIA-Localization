@@ -106,6 +106,10 @@ def mine_invariants(dataset: ICSDataset, conf: dict):
     print("Number of rules:", len(rules))
 
     invariants = create_invariant_objs(rules, index_to_predicate)
+    invariants_path = path.join("checkpoint", checkpoint, "invariants.pkl")
+    with open(invariants_path, "wb") as fd:
+        pickle.dump(invariants, fd)
+
     return invariants
 
 

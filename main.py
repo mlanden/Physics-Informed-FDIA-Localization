@@ -5,6 +5,7 @@ import sys
 
 from datasets import SWATDataset
 from training import Trainer
+from evaluation import NNEvaluator
 from invariants import generate_predicates, mine_invariants
 
 if __name__ == '__main__':
@@ -43,8 +44,8 @@ if __name__ == '__main__':
                               sequence_len=1,
                               train=False,
                               load_scaler=True)
-        trainer = Trainer(conf, dataset)
-        trainer.test()
+        evaluator = NNEvaluator(conf, dataset)
+        evaluator.evaluate()
     elif task == "predicates":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=conf["model"]["sequence_length"],

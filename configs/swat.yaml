@@ -1,8 +1,8 @@
 #task: train
 #task: error
-#task: test
+task: test
 #task: predicates
-task: invariants
+#task: invariants
 data:
   normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: ../Datasets/SWAT/First_Hour_2015.csv
