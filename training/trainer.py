@@ -27,7 +27,7 @@ from utils import launch_distributed
 
 
 class Trainer:
-    def __init__(self, conf: dict, dataset: torch.utils.data.Dataset):
+    def __init__(self, conf: dict, dataset: ICSDataset):
         self.conf = conf
         self.dataset = dataset
         self.optimizer = None
@@ -92,7 +92,7 @@ class Trainer:
         else:
             print(f"Launching {self.n_workers} trainers")
             mp.spawn(launch_distributed, args=(self.n_workers, self._train),
-                     nprocs=self.n_workers, start_method="fork")
+                     nprocs=self.n_workers)
 
     def _train(self):
         signal.signal(signal.SIGINT, quit)
@@ -110,7 +110,6 @@ class Trainer:
         validation_data = Subset(self.dataset, val_idx)
 
         epoch = self.create_prediction_model(train=True)
-        print(self.model)
         if not dist.is_initialized():
             train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True)
             validation_data = DataLoader(validation_data)
@@ -128,7 +127,7 @@ class Trainer:
 
         writer = SummaryWriter("tf_board/" + self.checkpoint) if self.use_tensorboard else None
         start = time.time()
-        for i in range(epoch + 1, self.epochs):
+        for i in range(epoch, self.epochs):
             if dist.is_initialized():
                 train_sampler.set_epoch(i)
             self.model.train()
@@ -140,7 +139,7 @@ class Trainer:
             else:
                 loader = train_data
             for seq, target in loader:
-                losses = self.loss_fn(self.model, seq, target)
+                losses = self.loss_fn(self.model, seq, target, self.dataset.get_categorical_features())
                 loss = torch.sum(losses)
 
                 self.optimizer.zero_grad()
@@ -158,7 +157,7 @@ class Trainer:
             if not dist.is_initialized() or dist.get_rank() == 0:
                 length = time.time() - start
                 print(f"Loss: {epoch_loss / len(loader)}, {length} seconds", flush=True)
-                self.save_checkpoint(i)
+                self.save_checkpoint(i + 1)
 
             if self.validation_frequency > 0 and i % self.validation_frequency == 0:
                 self.model.eval()
@@ -166,7 +165,7 @@ class Trainer:
                 if validation_sampler is not None:
                     validation_sampler.set_epoch(i)
                 for seq, target in validation_data:
-                    losses = self.loss_fn(self.model, seq, target)
+                    losses = self.loss_fn(self.model, seq, target, self.dataset.get_categorical_features())
                     loss = torch.sum(losses)
                     val_loss += loss.detach()
 
@@ -197,7 +196,8 @@ class Trainer:
         with torch.no_grad():
             hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
             for features, target in tqdm(normal_data):
-                losses, hidden_states = self.loss_fn(self.model, features, target, hidden_states)
+                losses, hidden_states = self.loss_fn(self.model, features, target, self.dataset.
+                                                     get_categorical_features(), hidden_states)
                 # losses = torch.sum(losses)
                 # print(losses)
                 loss_vectors.append(losses.view(1, -1))

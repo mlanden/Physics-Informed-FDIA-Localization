@@ -1,13 +1,17 @@
 from abc import ABC, abstractmethod
+from tqdm import tqdm
 from os import path
 import json
 import numpy as np
 
 from torch.utils.data import DataLoader
 
+from datasets import ICSDataset
+
 
 class Evaluator(ABC):
-    def __init__(self, conf, dataset):
+    def __init__(self, conf: dict, dataset: ICSDataset):
+        self.categorical_features = dataset.get_categorical_features()
         self.dataset = DataLoader(dataset)
         self.conf = conf
         self.checkpoint = conf["train"]["checkpoint"]

@@ -4,13 +4,8 @@ import torch.nn as nn
 from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 
 
-def swat_loss(model, batch: torch.Tensor, target: torch.Tensor, hidden_states=None) -> Union[
+def swat_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_values: dict, hidden_states=None) -> Union[
     Tuple[torch.Tensor, Tuple], torch.Tensor]:
-    if isinstance(model, DDP):
-        categorical_values = model.module.categorical_values
-    else:
-        categorical_values = model.categorical_values
-
     if hidden_states is not None:
         outputs, hidden_states = model.forward(batch, hidden_states)
     else:

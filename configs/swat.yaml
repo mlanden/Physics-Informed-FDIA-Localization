@@ -20,13 +20,13 @@ model:
   window_size: 20
 
 train:
-  n_workers: 2
+  n_workers: 1
   batch_size: 64
-  epochs: 100
+  epochs: 1
   lr: 0.0005
   regularization: 0.00001
   checkpoint: swat_2015_full
-  load_checkpoint: 1
+  load_checkpoint: 0
 
   tensorboard: 1
   train_fraction: 0.4
