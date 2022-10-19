@@ -1,3 +1,4 @@
+import time
 from abc import ABC, abstractmethod
 from tqdm import tqdm
 from os import path
@@ -7,6 +8,7 @@ import numpy as np
 from torch.utils.data import DataLoader
 
 from datasets import ICSDataset
+from utils import save_results
 
 
 class Evaluator(ABC):
@@ -51,7 +53,9 @@ class Evaluator(ABC):
             if attack_start == -1 and attack:
                 attack_start = step
 
+            start = time.time()
             alert = self.alert(features, target)
+            print(f"Alerting took {time.time() - start} seconds")
             if attack:
                 if alert:
                     delay = step - attack_start
@@ -67,27 +71,8 @@ class Evaluator(ABC):
             msg = f"{step :5d} / {len(self.dataset)}: TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}"
             if len(delays) > 0:
                 msg += f", Dwell: {np.mean(delays):.3f}"
-            print(f"\r", msg, end="")
+            # print(f"\r", msg, end="")
         print()
 
-        tpr = tp / (tp + fn)
-        tnr = tn / (tn + fp)
-        fpr = fp / (fp + tn)
-        fnr = fn / (fn + tp)
+        save_results(tn, scores, fn, delays, fp, tp, labels, self.results_path)
 
-        print(f"True Positive: {tpr * 100 :3.2f}")
-        print(f"True Negative: {tnr * 100 :3.2f}")
-        print(f"False Positive: {fpr * 100 :3.2f}")
-        print(f"False Negatives: {fnr * 100 :3.2f}")
-
-        results = {
-            "tp": tp,
-            "tn": tn,
-            "fp": fp,
-            "fn": fn,
-            "delay": delays,
-            "scores": scores,
-            "labels": labels
-        }
-        with open(path.join(self.results_path, "detection.json"), "w") as fd:
-            json.dump(results, fd)

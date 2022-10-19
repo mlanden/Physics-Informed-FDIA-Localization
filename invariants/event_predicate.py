@@ -6,32 +6,27 @@ from .predicate import Predicate
 
 class EventPredicate(Predicate):
 
-    def __init__(self, coefficients, bias, target_idx, epsilon, positive_error, continuous_features):
+    def __init__(self, model, target_idx, epsilon, positive_error, continuous_features):
         super().__init__()
         self.positive_error = positive_error
         self.continuous_features = continuous_features
         self.target_idx = target_idx
         self.epsilon = epsilon
-        self.bias = bias
-        self.coefficients = coefficients
+        self.model = model
 
-    def is_satisfied(self, state: torch.Tensor) -> bool:
-        continuous_idx = 0
-        total = self.bias
-        for i in range(len(state)):
-            if i not in self.continuous_features:
-                continue
+        self.features = list(continuous_features)
+        self.features.remove(target_idx)
 
-            if i != self.target_idx:
-                total += self.coefficients[continuous_idx] * state[i]
-                continuous_idx += 1
+    def is_satisfied(self, states: np.ndarray) -> bool:
+        state_features = states[:, self.features]
+        pred = self.model.predict(state_features)
 
         if self.positive_error:
-            total += self.epsilon
-            return state[self.target_idx] < total
+            pred += self.epsilon
+            return states[:, self.target_idx] < pred
         else:
-            total -= self.epsilon
-            return state[self.target_idx] > total
+            pred -= self.epsilon
+            return states[:, self.target_idx] > pred
 
     def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
         continuous_output = network_outputs[1]
@@ -53,8 +48,8 @@ class EventPredicate(Predicate):
     def __hash__(self):
         if self.hash is None:
             hash_ = []
-            hash_.extend(self.coefficients)
-            hash_.append(self.bias)
+            hash_.extend(tuple(self.model.coef_.flatten()))
+            hash_.extend(tuple(self.model.intercept_.flatten()))
             hash_.append(self.target_idx)
             hash_.append(self.positive_error)
             self.hash = hash(tuple(hash_))
@@ -64,5 +59,5 @@ class EventPredicate(Predicate):
         if not isinstance(other, EventPredicate):
             return False
 
-        return np.all(self.coefficients == other.coefficients) and self.bias == other.bias and self.target_idx == \
-               other.target_idx and self.positive_error == other.positive_error
+        return np.all(self.model.coef_ == other.model.coef_) and np.all(self.model.intercept_ == other.model.intercept_)\
+               and self.target_idx == other.target_idx and self.positive_error == other.positive_error

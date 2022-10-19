@@ -59,6 +59,7 @@ def _generate_distribution_predicates(dataset: ICSDataset, conf: dict) -> List[P
 
         print(f"Fitting models for feature {feature}")
         train_data = deltas[:, feature].reshape(-1, 1)
+
         max_score = -np.Inf
         best_model = None
         for k in range(1, max_components + 1):
@@ -73,10 +74,9 @@ def _generate_distribution_predicates(dataset: ICSDataset, conf: dict) -> List[P
         scores = best_model.score_samples(train_data)
         threshold = scores.min() * distribution_threshold
         means = best_model.means_.flatten()
-        variances = best_model.covariances_.flatten()
-        weights = best_model.weights_
+
         for i in range(len(means)):
-            predicates.append(DistributionPredicate(means, variances, weights, threshold, feature, continuous_idx, i))
+            predicates.append(DistributionPredicate(best_model, threshold, feature, continuous_idx, i))
         continuous_idx += 1
 
     return predicates
@@ -112,11 +112,10 @@ def _generate_event_predicates(dataset: ICSDataset, conf: dict) -> List[Predicat
                     y_pred = model.predict(x)
                     error = np.abs(y - y_pred)
                     if np.max(error) < epsilon:
-                        print()
-                        plus_predicate = EventPredicate(model.coef_, model.intercept_, target_feature, epsilon, True,
+                        plus_predicate = EventPredicate(model, target_feature, epsilon, True,
                                                         continuous_features)
                         predicates.append(plus_predicate)
-                        neg_predicate = EventPredicate(model.coef_, model.intercept_, target_feature, epsilon, False,
+                        neg_predicate = EventPredicate(model, target_feature, epsilon, False,
                                                        continuous_features)
                         predicates.append(neg_predicate)
     return predicates

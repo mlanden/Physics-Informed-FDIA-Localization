@@ -8,7 +8,7 @@ class Invariant:
         self.antecedent = antecedent
         self.consequent = consequent
 
-    def evaluate(self, state):
+    def satisfied(self, state):
         for predicate in self.antecedent:
             if not predicate.is_satisfied(state):
                 return True

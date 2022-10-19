@@ -20,13 +20,13 @@ model:
   window_size: 20
 
 train:
-  n_workers: 1
+  n_workers: 8
   batch_size: 64
   epochs: 1
   lr: 0.0005
   regularization: 0.00001
   checkpoint: swat_2015_full
-  load_checkpoint: 0
+  load_checkpoint: 1
 
   tensorboard: 1
   train_fraction: 0.4
@@ -37,7 +37,8 @@ train:
   max_gmm_components: 5
   distribution_threshold: 1.01
   event_predicate_error: 0.01
-  gamma: 0.008
-  theta: 0.0005
-  max_depth: 5
+  gamma: 0.9
+  theta: 0.08
+  max_depth: 4
   max_sets: 500000
+  type: invariants

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 import torch
+import numpy as np
 
 
 class Predicate(ABC):
@@ -8,12 +9,12 @@ class Predicate(ABC):
         self.hash = None
 
     @abstractmethod
-    def is_satisfied(self, state: torch.Tensor) -> bool:
+    def is_satisfied(self, states: np.ndarray) -> np.ndarray:
         """ Return whether the predicate is satisfied in a state
 
         Parameters
         ---------
-        state: Tensor
+        states: Tensor
         The state of the system to test
         """
         pass

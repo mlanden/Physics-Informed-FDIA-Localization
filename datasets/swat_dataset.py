@@ -30,7 +30,7 @@ class SWATDataset(ICSDataset):
         scale_file = path.join("checkpoint", self.checkpoint, "scaler.gz")
 
         self.features = self.data.iloc[:, 1: -1].to_numpy()
-        self.labels = self.data.iloc[:, -1]
+        self.labels = self.data.iloc[:, -1] == "Attack"
 
         if load_scaler:
             self.scaler = joblib.load(scale_file)
@@ -70,7 +70,7 @@ class SWATDataset(ICSDataset):
         else:
             return (np.array(self.features[item, :], dtype=np.float32),
                     np.array(self.features[item + 1, :], dtype=np.float32),
-                    self.labels.iloc[item] == "Attack")
+                    self.labels)
 
     def get_data(self):
         return self.features, self.labels

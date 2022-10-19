@@ -1,3 +1,4 @@
+import numpy as np
 import pandas as pd
 from typing import Tuple
 from abc import ABC, abstractmethod
@@ -11,5 +12,5 @@ class ICSDataset(ABC, Dataset):
         pass
 
     @abstractmethod
-    def get_data(self) -> Tuple[pd.DataFrame, pd.DataFrame]:
+    def get_data(self) -> Tuple[np.ndarray, np.ndarray]:
         pass

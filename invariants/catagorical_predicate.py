@@ -1,3 +1,4 @@
+import numpy as np
 import torch
 
 from .predicate import Predicate
@@ -13,15 +14,15 @@ class CategoricalPredicate(Predicate):
 
         self.loss = torch.nn.CrossEntropyLoss()
 
-    def is_satisfied(self, state: torch.Tensor) -> bool:
+    def is_satisfied(self, states: np.ndarray) -> bool:
         """ Determine whether a state of the system has a categorical variable set to the target class
 
         Parameters
         -----------
-        state : Tensor
+        states : Tensor
         The complete system state
         """
-        return state[self.idx] == self.class_value
+        return states[:, self.idx] == self.class_value
 
     def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
         """ Returns the cross entropy between the given class logits and the target class

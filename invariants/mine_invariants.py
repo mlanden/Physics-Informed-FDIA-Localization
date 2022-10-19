@@ -1,4 +1,6 @@
-import json
+import os
+import sys
+sys.setrecursionlimit(50000)
 import time
 import queue
 from typing import List, Tuple
@@ -6,7 +8,6 @@ from collections import defaultdict
 import multiprocessing as mp
 
 import numpy as np
-import torch
 import pickle
 from os import path
 import matplotlib
@@ -17,7 +18,7 @@ import matplotlib.pyplot as plt
 from .predicate import Predicate
 from .invariant import Invariant
 from datasets import ICSDataset
-from utils import cfp_growth, MISTree
+from utils import cfp_growth, MISTree, save_results
 
 
 def mine_invariants(dataset: ICSDataset, conf: dict):
@@ -50,13 +51,10 @@ def mine_invariants(dataset: ICSDataset, conf: dict):
             pickle.dump(predicate_counts, fd)
 
     print("Predicates assigned")
-    fig, ax = plt.subplots()
-    ax.hist(predicate_counts.values(), bins=25)
-    plt.savefig("predicates.png")
+    # fig, ax = plt.subplots()
+    # ax.hist(predicate_counts.values(), bins=25)
+    # plt.savefig("predicates.png")
 
-    # for p in predicate_counts:
-    #     print(type(index_to_predicate[p]).__name__, predicate_counts[p])
-    # quit()
     features, labels = dataset.get_data()
 
     min_supports = {}
@@ -74,7 +72,7 @@ def mine_invariants(dataset: ICSDataset, conf: dict):
     counts_path = path.join("checkpoint", checkpoint, "predicate_counts.pkl")
     tree_path = path.join("checkpoint", checkpoint, "tree.pkl")
 
-    if path.exists(sets_path) and load_checkpoint and False:
+    if path.exists(sets_path) and load_checkpoint:
         with open(sets_path, "rb") as fd:
             closed_sets = pickle.load(fd)
         with open(counts_path, "rb") as fd:
@@ -88,6 +86,10 @@ def mine_invariants(dataset: ICSDataset, conf: dict):
                                                          max_depth, max_sets)
         length = time.time() - start
         print(f"{len(freq_patterns)} predicate sets built in {length} seconds")
+        with open(counts_path, "wb") as fd:
+            pickle.dump(pattern_counts, fd)
+        with open(tree_path, "wb") as fd:
+            pickle.dump(tree, fd)
 
         print("Starting find closed sets")
         closed_sets = find_closed_predicate_sets(freq_patterns, pattern_counts, predicate_counts,
@@ -97,10 +99,6 @@ def mine_invariants(dataset: ICSDataset, conf: dict):
 
         with open(sets_path, "wb") as fd:
             pickle.dump(closed_sets, fd)
-        with open(counts_path, "wb") as fd:
-            pickle.dump(pattern_counts, fd)
-        with open(tree_path, "wb") as fd:
-            pickle.dump(tree, fd)
 
     rules = generate_rules(closed_sets, pattern_counts, tree)
     print("Number of rules:", len(rules))
@@ -113,12 +111,11 @@ def mine_invariants(dataset: ICSDataset, conf: dict):
     return invariants
 
 
-def generate_rules(closed_sets, predicate_counts, tree, min_confidence=1):
+def generate_rules(closed_sets, predicate_counts, tree, min_confidence=0.7):
     rules = []
     for i in range(1, len(closed_sets)):
         print(f"Generating rules for {i} / {len(closed_sets)} closed sets")
         for j, freq_sets in enumerate(closed_sets[i]):
-            print(f"Running through {j} / {len(closed_sets[i])} frequent patterns")
             predicates = [frozenset([item]) for item in freq_sets]
             if i == 1:
                 compute_confidence(freq_sets, predicates, tree, predicate_counts, rules, min_confidence)
@@ -228,13 +225,10 @@ def compute_confidence(freq_set, predicates: list, tree: MISTree, pattern_counts
     rule_sets = []
     for consequence in predicates:
         antecedent = freq_set - consequence
-        print(antecedent, freq_set)
         if antecedent not in pattern_counts:
             pattern_counts[antecedent] = tree.support(list(antecedent))
-            print(f"Support: {pattern_counts[antecedent]}")
 
         confidence = pattern_counts[freq_set] / pattern_counts[antecedent]
-        print("confidence:", pattern_counts[freq_set], pattern_counts[antecedent])
         if confidence >= min_confidence:
             rules.append((antecedent, consequence, confidence))
             rule_sets.append(consequence)
@@ -289,13 +283,14 @@ def assign_predicates(predicates: List[Predicate], dataset: ICSDataset, n_worker
     predicate_counts = {}
     for p in range(len(predicates)):
         predicate_counts[p] = 0
-    predicates_satisfied = {}
+    predicates_satisfied = defaultdict(list)
+
     if n_workers > 1:
         task_queue, result_queue = mp.JoinableQueue(), mp.JoinableQueue()
         events = [mp.Event() for _ in range(n_workers)]
-        for state in features:
-            task_queue.put(state)
-        workers = [mp.Process(target=_assign_predicates, args=(i, predicates, task_queue, result_queue, events)) for i
+        for p in range(len(predicates)):
+            task_queue.put(p)
+        workers = [mp.Process(target=_assign_predicates, args=(i, predicates, features, task_queue, result_queue, events)) for i
                    in range(n_workers)]
         for worker in workers:
             worker.start()
@@ -304,14 +299,16 @@ def assign_predicates(predicates: List[Predicate], dataset: ICSDataset, n_worker
         counter = 0
         while result_queue.qsize() > 0 or not done:
             try:
-                state, predicates_result = result_queue.get(timeout=1)
-                predicates_satisfied[tuple(state)] = predicates_result
-                for i in predicates_result:
-                    predicate_counts[i] += 1
+                p_idx, predicates_result = result_queue.get(timeout=1)
+                for state_idx in range(len(features)):
+                    if predicates_result[state_idx]:
+                        predicate_counts[p_idx] += 1
+                    predicates_satisfied[tuple(features[state_idx])].append(p_idx)
+
                 result_queue.task_done()
                 counter += 1
                 print(end="\r")
-                print(f"Assigned {counter} / {len(features)} states", flush=True, end="")
+                print(f"Assigned {counter} / {len(predicates)} predicates", flush=True, end="")
 
                 done = True
                 for e in events:
@@ -324,23 +321,25 @@ def assign_predicates(predicates: List[Predicate], dataset: ICSDataset, n_worker
         for worker in workers:
             worker.join()
     else:
-        for i, state in enumerate(features):
-            predicates_result = count_predicate_satisfied(predicates, torch.as_tensor(state))
-            predicates_satisfied[tuple(state)] = predicates_result
-            for i in predicates_result:
-                predicate_counts[i] += 1
-            print(f"Assigned {i:5d} / {len(features)} states", end="\r", flush=True)
+        for i, p in enumerate(predicates):
+            res = p.is_satisfied(features)
+            for state_idx in range(len(features)):
+                if res[state_idx]:
+                    predicate_counts[i] += 1
+                predicates_satisfied[tuple(features[state_idx])].append(i)
+            print(f"Assigned {i:5d} / {len(predicates)} predicates", end="\r", flush=True)
     print()
     return dict(predicate_counts), predicates_satisfied
 
 
-def _assign_predicates(rank: int, predicates: List[Predicate], tasks: mp.JoinableQueue, results: mp.JoinableQueue,
+def _assign_predicates(rank: int, predicates: List[Predicate], features: np.ndarray, tasks: mp.JoinableQueue,
+                       results: mp.JoinableQueue,
                        work_completed_events: List[mp.Event]):
     while tasks.qsize() > 0:
         try:
-            state = tasks.get(timeout=0.1)
-            predicates_satisfied = count_predicate_satisfied(predicates, state)
-            results.put((state, predicates_satisfied))
+            p_idx = tasks.get(timeout=0.1)
+            predicates_satisfied = predicates[p_idx].is_satisfied(features)
+            results.put((p_idx, predicates_satisfied))
             tasks.task_done()
         except queue.Empty:
             pass
@@ -348,11 +347,82 @@ def _assign_predicates(rank: int, predicates: List[Predicate], tasks: mp.Joinabl
     work_completed_events[rank].set()
 
 
-def count_predicate_satisfied(predicates: List[Predicate], state: torch.Tensor):
-    predicates_satisfied = []
-    for i, predicate in enumerate(predicates):
-        if type(state) is not torch.Tensor:
-            state = torch.as_tensor(state)
-        if predicate.is_satisfied(state):
-            predicates_satisfied.append(i)
-    return predicates_satisfied
+def evaluate(conf: dict, dataset: ICSDataset):
+    checkpoint = conf["train"]["checkpoint"]
+    predicate_path = path.join("checkpoint", checkpoint, "predicates.pkl")
+    with open(predicate_path, "rb") as fd:
+        predicates = pickle.load(fd)
+    index_to_predicate, predicate_to_index = create_mappings(predicates)
+    n_workers = conf["train"]["n_workers"]
+
+    load_checkpoint = conf["train"]["load_checkpoint"]
+    assign_path = path.join("results", checkpoint, "assigned_predicates.pkl")
+    if load_checkpoint and path.exists(assign_path):
+        with open(assign_path, "rb") as fd:
+            predicates_satisfied = pickle.load(fd)
+    else:
+        predicate_counts, predicates_satisfied = assign_predicates(predicates, dataset, n_workers)
+        with open(assign_path, "wb") as fd:
+            pickle.dump(predicates_satisfied, fd)
+
+    invariants_path = path.join("checkpoint", checkpoint, "invariants.pkl")
+    ante, conseq = [], []
+    with open(invariants_path, "rb") as fd:
+        invariants = pickle.load(fd)
+        for invariant in invariants:
+            ante.append(len(invariant.antecedent))
+            conseq.append(len(invariant.consequent))
+    print(f"mean antecedent: {np.mean(ante)}, Mean consequent: {np.mean(conseq)}")
+
+    features, labels = dataset.get_data()
+    print(f"There are {len(features)} states.")
+
+    alerts = [True for _ in range(len(features))]
+    for inv_idx, invariant in enumerate(invariants[:200]):
+        predicates_matched = np.zeros(len(features))
+        for predicate in invariant.antecedent:
+            idx = predicate_to_index[predicate]
+
+            for i, state in enumerate(features):
+                if idx in predicates_satisfied[tuple(state)]:
+                    predicates_matched[i] += 1
+
+        antecedents_unmatched = 0
+        print("Mean", np.mean(predicates_matched))
+        for i in range(len(features)):
+            if predicates_matched[i] < len(invariant.antecedent):
+                alerts[i] = False
+                antecedents_unmatched += 1
+
+        predicates_matched = np.zeros(len(features))
+        for predicate in invariant.consequent:
+            idx = predicate_to_index[predicate]
+            for i, state in enumerate(features):
+                if alerts[i] and idx in predicates_satisfied[tuple(state)]:
+                    predicates_matched[i] += 1
+
+        for i in range(len(features)):
+            if alerts[i] and predicates_matched[i] == len(invariant.consequent):
+                alerts[i] = False
+
+        print(f"Complete {inv_idx} / {len(invariants)} invariants. Unmatched {antecedents_unmatched},")#, end="\r")
+
+    tp = 0
+    tn = 0
+    fp = 0
+    fn = 0
+    for alert, attack in zip(alerts, labels):
+        if attack:
+            if alert:
+                tp += 1
+            else:
+                fn += 1
+        else:
+            if alert:
+                fp += 1
+            else:
+                tn += 1
+    result_path = path.join("results", checkpoint, "invariants")
+    if not path.exists(result_path):
+        os.makedirs(result_path)
+    save_results(tp, tn, fp, fn, labels.tolist(), result_path)

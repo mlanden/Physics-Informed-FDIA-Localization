@@ -5,8 +5,8 @@ import sys
 
 from datasets import SWATDataset
 from training import Trainer
-from evaluation import NNEvaluator
-from invariants import generate_predicates, mine_invariants
+from evaluation import NNEvaluator, InvariantEvaluator
+from invariants import generate_predicates, mine_invariants, evaluate
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -44,8 +44,15 @@ if __name__ == '__main__':
                               sequence_len=1,
                               train=False,
                               load_scaler=True)
-        evaluator = NNEvaluator(conf, dataset)
-        evaluator.evaluate()
+        type_ = conf["train"]["type"]
+        if type_ == "prediction":
+            evaluator = NNEvaluator(conf, dataset)
+            evaluator.evaluate()
+        elif type_ == "invariants":
+            evaluate(conf, dataset)
+        else:
+            raise RuntimeError("Unknown evaluation type")
+
     elif task == "predicates":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=conf["model"]["sequence_length"],
