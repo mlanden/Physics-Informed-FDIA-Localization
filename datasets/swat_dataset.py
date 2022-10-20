@@ -20,9 +20,6 @@ class SWATDataset(ICSDataset):
         elif data_path.endswith(".csv"):
             self.data = pd.read_csv(data_path, skiprows=0, header=1)
 
-        # for i in self.data:
-        #     print(i, self.data[i].unique())
-
         self.sequence_len = sequence_len
         self.window_size = conf["model"]["window_size"]
         self.checkpoint = conf["train"]["checkpoint"]
@@ -56,7 +53,6 @@ class SWATDataset(ICSDataset):
 
         self.sequences = np.array(self.sequences, dtype=np.float32)
         self.targets = np.array(self.targets, dtype=np.float32)
-        print(f"Number of sequences: {len(self.sequences)}")
 
     def __len__(self):
         if self.train:
@@ -78,6 +74,5 @@ class SWATDataset(ICSDataset):
     def get_categorical_features(self):
         # idx of value: number of possibilities
         categorical_values = {2: 3, 3: 2, 4: 2, 9: 3, 10: 2, 11: 2, 12: 2, 13: 2, 14: 2, 15: 2, 19: 3, 20: 3, 21: 3,
-                              22: 3,
-                              23: 2, 24: 2, 29: 2, 30: 2, 31: 2, 32: 2, 33: 3, 42: 2, 43: 2, 48: 2, 49: 2, 50: 2}
+                              22: 3, 23: 2, 24: 2, 29: 2, 30: 2, 31: 2, 32: 2, 33: 3, 42: 2, 43: 2, 48: 2, 49: 2, 50: 2}
         return categorical_values

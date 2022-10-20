@@ -42,7 +42,12 @@ class CategoricalPredicate(Predicate):
         return self.hash
 
     def __eq__(self, other):
+        print("Here")
         if not isinstance(other, CategoricalPredicate):
             return False
 
         return self.idx == other.idx and self.class_value == other.class_value
+
+    def __str__(self):
+        out = f"Categorical: Index:{self.idx}, Value: {self.class_value}"
+        return out

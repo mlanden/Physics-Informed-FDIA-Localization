@@ -5,8 +5,8 @@ import sys
 
 from datasets import SWATDataset
 from training import Trainer
-from evaluation import NNEvaluator, InvariantEvaluator
-from invariants import generate_predicates, mine_invariants, evaluate
+from evaluation import NNEvaluator
+from invariants import generate_predicates, InvariantMiner
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -49,7 +49,8 @@ if __name__ == '__main__':
             evaluator = NNEvaluator(conf, dataset)
             evaluator.evaluate()
         elif type_ == "invariants":
-            evaluate(conf, dataset)
+            miner = InvariantMiner(conf, dataset)
+            miner.evaluate()
         else:
             raise RuntimeError("Unknown evaluation type")
 
@@ -64,6 +65,7 @@ if __name__ == '__main__':
                               sequence_len=conf["model"]["sequence_length"],
                               train=True,
                               load_scaler=False)
-        mine_invariants(dataset, conf)
+        miner = InvariantMiner(conf, dataset)
+        miner.mine_invariants()
     else:
         raise RuntimeError(f"Unknown task: {task}")

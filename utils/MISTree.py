@@ -8,8 +8,8 @@ class MISTree:
         self.table = MISTable()
         self.root = TreeNode("root", None, 0)
 
-    def build(self, database, items_satisfied, min_supports):
-        for transaction in database:
+    def build(self, items_satisfied, min_supports):
+        for transaction in items_satisfied:
             item_list = []
             if type(transaction) is np.ndarray:
                 transaction = tuple(transaction)
@@ -227,10 +227,11 @@ class MISTable:
         return out
 
 
-def cfp_growth(database, items_satisfied, min_supports, max_depth, max_sets):
+def cfp_growth(items_satisfied, min_supports, max_depth):
     tree = MISTree()
-    tree.build(database, items_satisfied, min_supports)
+    tree.build(items_satisfied, min_supports)
     tree.prune()
+    print("Initial tree built")
 
     items = list(tree.table.support.keys())
     items.sort(key=lambda x: (tree.table.min_support[x], tree.table.support[x]))
@@ -241,35 +242,31 @@ def cfp_growth(database, items_satisfied, min_supports, max_depth, max_sets):
         cmin_support = tree.table.min_support[item]
         if tree.table.support[item] >= cmin_support:
             conditional_tree, conditional_pattern_bases = conditional_mis_tree(tree, item, [item], min_supports,
-                                                                               cmin_support, pattern_counts, -1)
+                                                                               cmin_support, pattern_counts)
             freq_patterns.extend(conditional_pattern_bases)
-            if len(freq_patterns) >= max_sets:
-                break
 
             if len(conditional_tree.table.support) > 0:
                 cfp_growth_helper(conditional_tree, [item], cmin_support, min_supports, freq_patterns, pattern_counts,
-                                  max_depth, max_sets)
+                                  max_depth)
 
     return freq_patterns, dict(pattern_counts), tree
 
 
 def cfp_growth_helper(tree, pattern_base, cmin_support, min_supports, freq_patterns: list, pattern_counts: dict,
-                      max_depth: int, max_sets: int, depth=0):
+                      max_depth: int, depth=0):
     for item in tree.table.min_support:
         new_pattern_base = list(pattern_base)
         new_pattern_base.insert(0, item)
         conditional_tree, conditional_pattern_bases = conditional_mis_tree(tree, item, new_pattern_base, min_supports,
-                                                                           cmin_support, pattern_counts, depth)
+                                                                           cmin_support, pattern_counts)
         freq_patterns.extend(conditional_pattern_bases)
-        if len(freq_patterns) >= max_sets:
-            return
 
-        if len(conditional_tree.table.support) > 0 and len(new_pattern_base) <= max_depth:
+        if len(conditional_tree.table.support) > 0 and len(new_pattern_base) < max_depth:
             cfp_growth_helper(conditional_tree, new_pattern_base, cmin_support, min_supports, freq_patterns,
                               pattern_counts, max_depth, depth + 1)
 
 
-def conditional_mis_tree(tree, item, pattern_base, min_supports, cmin_support, pattern_counts, depth):
+def conditional_mis_tree(tree, item, pattern_base, min_supports, cmin_support, pattern_counts):
     pattern_bases = []
     for start_node in tree.table.node_list[item]:
         pattern = []
@@ -314,7 +311,7 @@ if __name__ == '__main__':
                      3: ['g', 'b', 'f'], 4: ['b', 'c']}
         minimum_support = {'a': 4, 'b': 4, 'c': 4, 'd': 3, 'e': 3, 'f': 2, 'g': 2, 'h': 2}
 
-    frequent_patterns, pattern_counts, tree = cfp_growth(db, satisfied, minimum_support, max_depth=4, max_sets=500000)
+    frequent_patterns, pattern_counts, tree = cfp_growth(satisfied, minimum_support, max_depth=4)
     print(frequent_patterns)
     print(tree.support(['a', 'b']))
 

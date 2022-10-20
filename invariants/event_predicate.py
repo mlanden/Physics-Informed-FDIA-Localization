@@ -61,3 +61,7 @@ class EventPredicate(Predicate):
 
         return np.all(self.model.coef_ == other.model.coef_) and np.all(self.model.intercept_ == other.model.intercept_)\
                and self.target_idx == other.target_idx and self.positive_error == other.positive_error
+
+    def __str__(self):
+        out = "Event Predicate: "
+        return out

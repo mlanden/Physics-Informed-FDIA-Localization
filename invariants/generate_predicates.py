@@ -60,22 +60,23 @@ def _generate_distribution_predicates(dataset: ICSDataset, conf: dict) -> List[P
         print(f"Fitting models for feature {feature}")
         train_data = deltas[:, feature].reshape(-1, 1)
 
-        max_score = -np.Inf
+        best_score = np.Inf
         best_model = None
+        n_components = -1
         for k in range(1, max_components + 1):
             gmm = GaussianMixture(n_components=k)
             gmm.fit(train_data)
             bic = gmm.bic(train_data)
 
-            if bic > max_score:
-                max_score = bic
+            if bic < best_score:
+                best_score = bic
                 best_model = gmm
+                n_components = k
 
         scores = best_model.score_samples(train_data)
-        threshold = scores.min() * distribution_threshold
-        means = best_model.means_.flatten()
+        threshold = scores.mean() * distribution_threshold
 
-        for i in range(len(means)):
+        for i in range(n_components):
             predicates.append(DistributionPredicate(best_model, threshold, feature, continuous_idx, i))
         continuous_idx += 1
 

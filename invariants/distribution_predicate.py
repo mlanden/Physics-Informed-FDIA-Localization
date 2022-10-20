@@ -22,7 +22,8 @@ class DistributionPredicate(Predicate):
         states = states[:, self.state_idx].reshape(-1, 1)
         diffs = states[1:] - states[:-1]
         score = self.model.score_samples(diffs)
-        return np.hstack((False, score >= self.threshold))
+        cluster = self.model.predict(diffs)
+        return np.hstack((False, np.logical_and(score >= self.threshold, cluster == self.distribution_idx)))
 
     def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
         continuous_outputs = network_outputs[1]
@@ -52,3 +53,7 @@ class DistributionPredicate(Predicate):
         return np.all(self.model.means_ == other.model.means_) and np.all(self.model.covariances_ ==
             other.model.covariances_) and np.all(self.model.weights_ == other.model.weights_) and np.all(self.state_idx == other.state_idx) and \
                np.all(self.distribution_idx == other.distribution_idx)
+
+    def __str__(self):
+        out = "Distribution:"
+        return out
