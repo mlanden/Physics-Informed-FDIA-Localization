@@ -33,6 +33,7 @@ class InvariantMiner:
         self.local_min_support = conf["train"]["gamma"]
         self.global_min_support = conf["train"]["theta"]
         self.max_depth = conf["train"]["max_depth"]
+        self.min_confidence = conf["train"]["min_confidence"]
 
         if not path.exists(self.predicate_path):
             raise RuntimeError("No predicates found, create them first")
@@ -96,7 +97,7 @@ class InvariantMiner:
         #     del self.predicate_counts[i]
 
         print("Mean min support", np.mean(list(min_supports.values())), "Number of states:", len(features))
-        if path.exists(self.sets_path) and self.load_checkpoint and False:
+        if path.exists(self.sets_path) and self.load_checkpoint:
             with open(self.sets_path, "rb") as fd:
                 closed_sets = pickle.load(fd)
             with open(self.counts_path, "rb") as fd:
@@ -125,22 +126,20 @@ class InvariantMiner:
         self.generate_rules(closed_sets, pattern_counts)
         print("Number of rules:", len(self.rules))
 
-        invariants = self.create_invariant_objs()
+        # invariants = self.create_invariant_objs()
         with open(self.invariants_path, "wb") as fd:
-            pickle.dump(invariants, fd)
+            pickle.dump(self.rules, fd)
 
-        return invariants
-
-    def generate_rules(self, closed_sets, predicate_counts, min_confidence=0.7):
+    def generate_rules(self, closed_sets, predicate_counts):
         self.rules = []
         for i in range(1, len(closed_sets)):
             print(f"Generating rules for {i} / {len(closed_sets)} closed sets")
             for j, freq_sets in enumerate(closed_sets[i]):
                 predicates = [frozenset([item]) for item in freq_sets]
                 if i == 1:
-                    self.compute_confidence(freq_sets, predicates, predicate_counts, min_confidence)
+                    self.compute_confidence(freq_sets, predicates, predicate_counts)
                 else:
-                    self.create_rules(freq_sets, predicates, predicate_counts, min_confidence)
+                    self.create_rules(freq_sets, predicates, predicate_counts)
 
     def find_closed_predicate_sets(self, predicate_sets: List[frozenset], set_counts: dict,
                                    min_support: dict):
@@ -188,13 +187,14 @@ class InvariantMiner:
                         counter += 1
                         print(end="\r")
                         print(f"Completed {counter} / {n_tasks} tasks", flush=True, end="")
-
-                        done = True
-                        for e in work_events:
-                            if not e.is_set():
-                                done = False
                     except queue.Empty:
                         pass
+
+                    done = True
+                    for e in work_events:
+                        if not e.is_set():
+                            done = False
+
                 tasks.join()
                 results.join()
 
@@ -222,29 +222,29 @@ class InvariantMiner:
         print()
         return closed_sets
 
-    def compute_confidence(self, freq_set, predicates: list, pattern_counts: dict, min_confidence: float):
+    def compute_confidence(self, freq_set, predicates: list, pattern_counts: dict):
         rule_sets = []
         for consequence in predicates:
             if len(consequence) == len(freq_set):
                 continue
             antecedent = freq_set - consequence
             if antecedent not in pattern_counts:
-                print(antecedent)
                 pattern_counts[antecedent] = self.tree.support(list(antecedent))
 
             confidence = pattern_counts[freq_set] / pattern_counts[antecedent]
-            if confidence >= min_confidence:
-                self.rules.append((antecedent, consequence, confidence))
+            if confidence >= self.min_confidence:
+                rule = Invariant(antecedent, consequence, self.index_to_predicate)
+                self.rules.append(rule)
                 rule_sets.append(consequence)
         return rule_sets
 
-    def create_rules(self, freq_set: frozenset, predicates: List, pattern_counts: dict, min_confidence: float):
+    def create_rules(self, freq_set: frozenset, predicates: List, pattern_counts: dict):
         k = len(predicates[0])
         if len(freq_set) > k + 1:
             joined_sets = create_apriori_sets(predicates, k)
-            rule_sets = self.compute_confidence(freq_set, joined_sets, pattern_counts, min_confidence)
+            rule_sets = self.compute_confidence(freq_set, joined_sets, pattern_counts)
             if len(rule_sets) > 1:
-                self.create_rules(freq_set, rule_sets, pattern_counts, min_confidence)
+                self.create_rules(freq_set, rule_sets, pattern_counts)
 
     def create_invariant_objs(self):
         invariants = []
@@ -331,57 +331,41 @@ class InvariantMiner:
         work_completed_events[rank].set()
 
     def evaluate(self):
-        index_to_predicate, predicate_to_index = self.create_mappings()
+        features, labels = self.dataset.get_data()
         self.assign_path = path.join("results", self.checkpoint, "assigned_predicates.pkl")
         if self.load_checkpoint and path.exists(self.assign_path):
             with open(self.assign_path, "rb") as fd:
-                self.predicates_satisfied = pickle.load(fd)
+                assignments = pickle.load(fd)
         else:
             self.predicate_counts, self.predicates_satisfied = self.assign_predicates()
+            assignments = np.zeros((len(features), len(self.predicate_counts) + 2))
+            for state in self.predicates_satisfied:
+                for p in self.predicates_satisfied[state]:
+                    assignments[state, p] = 1
+
             with open(self.assign_path, "wb") as fd:
-                pickle.dump(self.predicates_satisfied, fd)
+                pickle.dump(assignments, fd)
 
         ante, conseq = [], []
         with open(self.invariants_path, "rb") as fd:
             invariants = pickle.load(fd)
-            for invariant in invariants:
-                ante.append(len(invariant.antecedent))
-                conseq.append(len(invariant.consequent))
-        print(f"Mean antecedent: {np.mean(ante)}, Mean consequent: {np.mean(conseq)}")
 
-        features, labels = self.dataset.get_data()
         print(f"There are {len(features)} states.")
-
-        alerts = [True for _ in range(len(features))]
-        for inv_idx, invariant in enumerate(invariants):
-            predicates_matched = np.zeros(len(features))
+        alerts = np.zeros((len(features)))
+        for i, invariant in enumerate(invariants[:50000]):
+            assignments[:, -2] = 1
+            assignments[:, -1] = 1
             for predicate in invariant.antecedent:
-                print(predicate)
-                idx = predicate_to_index[predicate]
+                assignments[assignments[:, predicate] == 0, -2] = 0
 
-                for i, state in enumerate(features):
-                    if idx in self.predicates_satisfied[i]:
-                        predicates_matched[i] += 1
-
-            antecedents_unmatched = 0
-            for i in range(len(features)):
-                if predicates_matched[i] < len(invariant.antecedent):
-                    alerts[i] = False
-                    antecedents_unmatched += 1
-
-            predicates_matched = np.zeros(len(features))
             for predicate in invariant.consequent:
-                idx = predicate_to_index[predicate]
-                for i, state in enumerate(features):
-                    if alerts[i] and idx in self.predicates_satisfied[i]:
-                        predicates_matched[i] += 1
+                assignments[assignments[:, predicate] == 0, -1] = 0
 
-            for i in range(len(features)):
-                if alerts[i] and predicates_matched[i] == len(invariant.consequent):
-                    alerts[i] = False
+            alerts[(assignments[:, -2] == 1) & (assignments[:, -1] == 0)] = 1
+            print(f"\rCompleted {i} / {len(invariants)} invariants", end="")
 
-            print(
-                f"Complete {inv_idx} / {len(invariants)} invariants. Unmatched {antecedents_unmatched},")  # , end="\r")
+            # print(
+            #     f"Complete {inv_idx} / {len(invariants)} invariants. Unmatched {antecedents_unmatched},")  # , end="\r")
 
         tp = 0
         tn = 0
@@ -400,6 +384,7 @@ class InvariantMiner:
                     tn += 1
         if not path.exists(self.result_path):
             os.makedirs(self.result_path)
+        print()
         save_results(tp, tn, fp, fn, labels.tolist(), self.result_path)
 
 

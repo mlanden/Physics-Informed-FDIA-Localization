@@ -26,14 +26,15 @@ class DistributionPredicate(Predicate):
         return np.hstack((False, np.logical_and(score >= self.threshold, cluster == self.distribution_idx)))
 
     def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
-        continuous_outputs = network_outputs[1]
-        total = torch.zeros(1)
+        continuous_outputs = network_outputs[0]
+        total = torch.zeros(continuous_outputs.shape[0])
         for i in range(len(self.distributions)):
-            log_prob = self.distributions[i].log_prob(continuous_outputs[self.continuous_idx])
+            log_prob = self.distributions[i].log_prob(continuous_outputs[:, self.continuous_idx])
             total += self.weights[i] * log_prob
 
-        log_prob = self.distributions[self.distribution_idx].log_prob(continuous_outputs[self.continuous_idx])
-        return self.weights[self.distribution_idx] * log_prob / total
+        log_prob = self.distributions[self.distribution_idx].log_prob(continuous_outputs[:, self.continuous_idx])
+        confidence = torch.div(self.weights[self.distribution_idx] * log_prob, total)
+        return confidence.view(-1, 1)
 
     def __hash__(self):
         if self.hash is None:

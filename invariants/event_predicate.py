@@ -29,21 +29,22 @@ class EventPredicate(Predicate):
             return states[:, self.target_idx] > pred
 
     def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
-        continuous_output = network_outputs[1]
+        continuous_output = network_outputs[0]
         coef_idx = 0
         target = 0
-
-        total = self.bias
+        total = torch.full((continuous_output.shape[0], 1), self.model.intercept_)
         i = 0
-        while i < len(continuous_output):
+        while i < len(self.continuous_features):
             if self.continuous_features[i] != self.target_idx:
-                total += self.coefficients[coef_idx] * continuous_output[i]
+                term = self.model.coef_[coef_idx] * continuous_output[:, i]
+                term = term.view(-1, 1)
+                total += term
                 coef_idx += 1
             else:
-                target = continuous_output[i]
+                target = continuous_output[:, i].view(-1, 1)
             i += 1
-
-        return torch.abs(target - total)
+        confidence = torch.abs(target - total)
+        return confidence
 
     def __hash__(self):
         if self.hash is None:

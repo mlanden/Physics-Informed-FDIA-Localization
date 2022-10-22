@@ -1,10 +1,11 @@
+import pickle
 from os import path
 import torch
 
-from datasets import SWATDataset
+from datasets import ICSDataset, SWATDataset
 from models import swat_loss
 from .evaluator import Evaluator
-from datasets import ICSDataset
+from models import get_losses
 
 
 class NNEvaluator(Evaluator):
@@ -14,6 +15,7 @@ class NNEvaluator(Evaluator):
 
         self.model_path = path.join("checkpoint", self.checkpoint, "model.pt")
         self.normal_behavior_path = path.join("checkpoint", self.checkpoint, "normal_behavior.pt")
+        self.invariants_path = path.join("checkpoint", self.checkpoint, "invariants.pkl")
 
         info = torch.load(self.model_path)
         self.model = info["model"]
@@ -26,15 +28,19 @@ class NNEvaluator(Evaluator):
             self.loss_fn = swat_loss
         else:
             raise RuntimeError("Unknown model type")
-
+        self.loss = conf["train"]["loss"]
+        self.invariants = None
+        if self.loss == "invariant":
+            with open(self.invariants_path, "rb") as fd:
+                self.invariants = pickle.load(fd)
         self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
+        self.loss_fns = get_losses(self.dataset, self.invariants)
 
     def alert(self, state, target):
         state = state.unsqueeze(0)
         losses, self.hidden_states = self.loss_fn(self.model, state, target, self.categorical_features,
                                                   self.hidden_states)
         losses = losses.detach()
-        # losses = torch.sum(losses)
         score = torch.abs(losses - self.normal_means) / self.normal_stds
 
         # scores.append(score.item())

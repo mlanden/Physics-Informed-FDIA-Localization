@@ -32,9 +32,9 @@ class CategoricalPredicate(Predicate):
         network_outputs: list[Tensor]
         A list of logit outputs for each categorical variable in the system
         """
-        categorical_outputs = network_outputs[0]
-
-        return self.loss(categorical_outputs[self.categorical_idx], self.class_value)
+        categorical_output = network_outputs[self.categorical_idx + 1]
+        target = torch.full((categorical_output.shape[0],), self.class_value)
+        return self.loss(categorical_output, target)
 
     def __hash__(self):
         if self.hash is None:
@@ -42,7 +42,6 @@ class CategoricalPredicate(Predicate):
         return self.hash
 
     def __eq__(self, other):
-        print("Here")
         if not isinstance(other, CategoricalPredicate):
             return False
 

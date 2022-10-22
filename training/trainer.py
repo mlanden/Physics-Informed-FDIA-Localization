@@ -1,4 +1,5 @@
 import json
+import pickle
 import signal
 
 import joblib
@@ -7,6 +8,7 @@ import os
 from os import path
 from tqdm import tqdm
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve
@@ -19,7 +21,6 @@ from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from torch import optim
 from torch import multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
-
 
 from models import *
 from datasets import *
@@ -49,9 +50,14 @@ class Trainer:
         self.model_path = path.join("checkpoint", self.checkpoint, "model.pt")
         self.scalar_path = path.join("checkpoint", self.checkpoint, "scaler.gz")
         self.normal_behavior_path = path.join("checkpoint", self.checkpoint, "normal_behavior.pt")
+        self.invariants_path = path.join("checkpoint", self.checkpoint, "invariants.pkl")
         self.results_path = path.join("results", self.checkpoint)
-
-        self.loss_fn = None
+        self.loss = conf["train"]["loss"]
+        self.invariants = None
+        if self.loss == "invariant":
+            with open(self.invariants_path, "rb") as fd:
+                self.invariants = pickle.load(fd)
+        self.loss_fns = get_losses(self.dataset, self.invariants)
 
     def create_prediction_model(self, train=False):
         epoch = 0
@@ -68,10 +74,6 @@ class Trainer:
             else:
                 self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
-        if isinstance(self.dataset, SWATDataset):
-            self.loss_fn = swat_loss
-        else:
-            raise RuntimeError("Unknown model type")
         return epoch
 
     def save_checkpoint(self, epoch):
@@ -139,8 +141,8 @@ class Trainer:
             else:
                 loader = train_data
             for seq, target in loader:
-                losses = self.loss_fn(self.model, seq, target, self.dataset.get_categorical_features())
-                loss = torch.sum(losses)
+                losses = self.compute_loss(seq, target)
+                loss = torch.sum(losses, dim=1)
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -165,7 +167,7 @@ class Trainer:
                 if validation_sampler is not None:
                     validation_sampler.set_epoch(i)
                 for seq, target in validation_data:
-                    losses = self.loss_fn(self.model, seq, target, self.dataset.get_categorical_features())
+                    losses = self.compute_loss(seq, target)
                     loss = torch.sum(losses)
                     val_loss += loss.detach()
 
@@ -184,6 +186,13 @@ class Trainer:
             length = time.time() - start
             print(f"Training took {length :.3f} seconds")
 
+    def compute_loss(self, seq, target, hidden_states=None):
+        loss = []
+        for loss_fn in self.loss_fns:
+            losses = loss_fn(self.model, seq, target, self.dataset.get_categorical_features(), hidden_states)
+            loss.append(losses.view(1, -1))
+        return torch.concat(loss, dim=1)
+
     def find_normal_error(self):
         start = int((self.train_fraction + self.validate_fraction) * len(self.dataset))
         size = int(self.find_error_fraction * len(self.dataset))
@@ -196,11 +205,9 @@ class Trainer:
         with torch.no_grad():
             hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
             for features, target in tqdm(normal_data):
-                losses, hidden_states = self.loss_fn(self.model, features, target, self.dataset.
-                                                     get_categorical_features(), hidden_states)
-                # losses = torch.sum(losses)
-                # print(losses)
-                loss_vectors.append(losses.view(1, -1))
+                losses = self.compute_loss(features, target, hidden_states)
+
+                loss_vectors.append(losses)
 
         loss_vectors = torch.concat(loss_vectors, 0)
         means = torch.mean(loss_vectors, 0).numpy().flatten()

@@ -14,3 +14,7 @@ class ICSDataset(ABC, Dataset):
     @abstractmethod
     def get_data(self) -> Tuple[np.ndarray, np.ndarray]:
         pass
+
+    @abstractmethod
+    def __len__(self):
+        pass

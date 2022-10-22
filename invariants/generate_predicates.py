@@ -114,9 +114,9 @@ def _generate_event_predicates(dataset: ICSDataset, conf: dict) -> List[Predicat
                     error = np.abs(y - y_pred)
                     if np.max(error) < epsilon:
                         plus_predicate = EventPredicate(model, target_feature, epsilon, True,
-                                                        continuous_features)
+                                                        list(continuous_features))
                         predicates.append(plus_predicate)
                         neg_predicate = EventPredicate(model, target_feature, epsilon, False,
-                                                       continuous_features)
+                                                       list(continuous_features))
                         predicates.append(neg_predicate)
     return predicates

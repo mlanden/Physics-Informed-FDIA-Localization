@@ -7,6 +7,8 @@ def save_results(tp, tn, fp, fn, labels, results_path, scores=None, delays=None)
     tnr = tn / (tn + fp)
     fpr = fp / (fp + tn)
     fnr = fn / (fn + tp)
+
+    print("\n")
     print(f"True Positive: {tpr * 100 :3.2f}")
     print(f"True Negative: {tnr * 100 :3.2f}")
     print(f"False Positive: {fpr * 100 :3.2f}")
@@ -26,3 +28,5 @@ def save_results(tp, tn, fp, fn, labels, results_path, scores=None, delays=None)
 
     with open(path.join(results_path, "detection.json"), "w") as fd:
         json.dump(results, fd)
+
+
