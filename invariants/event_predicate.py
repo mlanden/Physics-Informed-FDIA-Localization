@@ -28,17 +28,19 @@ class EventPredicate(Predicate):
             pred -= self.epsilon
             return states[:, self.target_idx] > pred
 
-    def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states, network_outputs: torch.Tensor) -> torch.Tensor:
         continuous_output = network_outputs[0]
         coef_idx = 0
         target = 0
         total = torch.full((continuous_output.shape[0], 1), self.model.intercept_)
         i = 0
         while i < len(self.continuous_features):
-            if self.continuous_features[i] != self.target_idx:
-                term = self.model.coef_[coef_idx] * continuous_output[:, i]
+            if self.continuous_features[i] != self.target_idx and self.model.coef_[coef_idx] != 0:
+                term = self.model.coef_[coef_idx] * (input_states[:, -1, i] + continuous_output[:, i])
                 term = term.view(-1, 1)
                 total += term
+                coef_idx += 1
+            elif self.continuous_features[i] != self.target_idx and self.model.coef_[coef_idx] == 0:
                 coef_idx += 1
             else:
                 target = continuous_output[:, i].view(-1, 1)

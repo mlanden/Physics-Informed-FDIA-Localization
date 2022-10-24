@@ -2,6 +2,7 @@ import os
 from os import path
 import yaml
 import sys
+import torch
 
 from datasets import SWATDataset
 from training import Trainer
@@ -25,19 +26,25 @@ if __name__ == '__main__':
 
     task = conf["task"]
     print("Task:", task)
+    cuda = conf["train"]["cuda"]
+    if cuda:
+        device = torch.device("gpu:")
+    else:
+        device = torch.device("cpu")
+
     if task == "train":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=conf["model"]["sequence_length"],
                               train=True,
                               load_scaler=False)
-        trainer = Trainer(conf, dataset)
+        trainer = Trainer(conf, dataset, device)
         trainer.train_prediction()
     elif task == "error":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=1,
                               train=True,
                               load_scaler=True)
-        trainer = Trainer(conf, dataset)
+        trainer = Trainer(conf, dataset, device)
         trainer.find_normal_error()
     elif task == "test":
         dataset = SWATDataset(conf, conf["data"]["attack"],

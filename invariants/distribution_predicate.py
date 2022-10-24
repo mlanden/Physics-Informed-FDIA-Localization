@@ -25,7 +25,7 @@ class DistributionPredicate(Predicate):
         cluster = self.model.predict(diffs)
         return np.hstack((False, np.logical_and(score >= self.threshold, cluster == self.distribution_idx)))
 
-    def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states, network_outputs: torch.Tensor) -> torch.Tensor:
         continuous_outputs = network_outputs[0]
         total = torch.zeros(continuous_outputs.shape[0])
         for i in range(len(self.distributions)):

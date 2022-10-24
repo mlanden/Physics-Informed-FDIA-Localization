@@ -294,13 +294,13 @@ class InvariantMiner:
                     counter += 1
                     print(end="\r")
                     print(f"Assigned {counter} / {len(self.predicates)} predicates", flush=True, end="")
-
-                    done = True
-                    for e in events:
-                        if not e.is_set():
-                            done = False
                 except queue.Empty:
                     pass
+
+                done = True
+                for e in events:
+                    if not e.is_set():
+                        done = False
             task_queue.join()
             result_queue.join()
             for worker in workers:

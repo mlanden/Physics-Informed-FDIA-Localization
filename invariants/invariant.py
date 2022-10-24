@@ -22,13 +22,13 @@ class Invariant:
                 return False
         return True
 
-    def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states: torch.Tensor, network_outputs: torch.Tensor) -> torch.Tensor:
         product = torch.ones((network_outputs[0].shape[0], 1))
         for predicate in self.antecedent_objs:
-            product *= predicate.confidence(network_outputs)
+            product *= predicate.confidence(input_states, network_outputs)
 
         for predicate in self.consequent_objs:
-            product *= predicate.confidence(network_outputs)
+            product *= predicate.confidence(input_states, network_outputs)
 
         return torch.mean(product)
 

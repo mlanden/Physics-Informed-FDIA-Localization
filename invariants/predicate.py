@@ -20,11 +20,14 @@ class Predicate(ABC):
         pass
 
     @abstractmethod
-    def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states: torch.Tensor, network_outputs: torch.Tensor) -> torch.Tensor:
         """Returns the confidence that a state satisfies the predicate 
         
         Parameters
         -------------
+        input_states: Tensor
+        The input sequences to the network
+
         network_outputs: Tensor
         The state of the system to test 
         """

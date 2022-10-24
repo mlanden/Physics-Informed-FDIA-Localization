@@ -1,22 +1,23 @@
+import queue
 from typing import Tuple, Union, List
 import torch
 import torch.nn as nn
+from torch import distributed as dist
 from functools import partial
+import multiprocessing as mp
 
 from invariants import Invariant
 from datasets import ICSDataset, SWATDataset
 
 
-def swat_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_values: dict, hidden_states=None) -> Union[
+def swat_loss(batch: torch.Tensor, outputs: torch.Tensor, target: torch.Tensor, categorical_values: dict) -> Union[
     Tuple[torch.Tensor, Tuple], torch.Tensor]:
-    hidden_states, outputs = evaluate_model(batch, hidden_states, model)
-
-    losses = torch.zeros(batch.shape[-1])
+    losses = torch.zeros(target.shape[-1])
     continuous_idx = 0
     classification_idx = 0
     class_loss = nn.CrossEntropyLoss()
     continuous_loss = nn.MSELoss()
-    for i in range(batch.shape[-1]):
+    for i in range(target.shape[-1]):
         if i in categorical_values:
             # Cross entropy_loss
             logits = outputs[classification_idx + 1]
@@ -33,38 +34,24 @@ def swat_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_valu
             losses[i] = continuous_loss(predicted, target_value)
             continuous_idx += 1
 
-    if hidden_states is not None:
-        return losses, hidden_states
-    else:
-        return losses
+    return losses
 
 
-def evaluate_model(batch, hidden_states, model):
-    if hidden_states is not None:
-        outputs, hidden_states = model.forward(batch, hidden_states)
-    else:
-        outputs = model.forward(batch)
-    return hidden_states, outputs
-
-
-def invariant_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_values: dict, hidden_states=None, invariants: List[Invariant]=None) -> Union[
-    Tuple[torch.Tensor, Tuple], torch.Tensor]:
-    hidden_states, outputs = evaluate_model(batch, hidden_states, model)
-
-    loss = torch.zeros((len(invariants)))
+def invariant_loss(batch: torch.Tensor, outputs: torch.Tensor, target: torch.Tensor, categorical_values: dict,
+                   invariants: List[Invariant] = None, n_workers = 1) -> Union[Tuple[torch.Tensor, Tuple], torch.Tensor]:
+    losses = torch.zeros((len(invariants)))
     for i, invariant in enumerate(invariants):
-        loss[i] = invariant.confidence(outputs)
-        print("\r", end="")
-        print(f"{i} / {len(invariants)} invariants evaluated", end="")
-    print()
+        losses[i] = invariant.confidence(batch, outputs)
+        if not dist.is_initialized() or dist.get_rank() == 0:
+            print("\r", end="")
+            print(f"{i + 1} / {len(invariants)} invariants evaluated", flush=True, end="")
+    if not dist.is_initialized() or dist.get_rank() == 0:
+        print()
 
-    if hidden_states is not None:
-        return loss, hidden_states
-    else:
-        return loss
+    return losses
 
 
-def get_losses(dataset: ICSDataset, invariants):
+def get_losses(dataset: ICSDataset, invariants, n_workers = 1):
     loss_fns = []
     if isinstance(dataset, SWATDataset):
         loss_fns.append(swat_loss)
@@ -72,6 +59,6 @@ def get_losses(dataset: ICSDataset, invariants):
         raise RuntimeError("Unknown model type")
 
     if invariants is not None:
-        loss_fns.append(partial(invariant_loss, invariants=invariants))
+        loss_fns.append(partial(invariant_loss, invariants=invariants, n_workers=n_workers))
 
     return loss_fns

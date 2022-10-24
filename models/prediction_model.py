@@ -40,7 +40,7 @@ class PredictionModel(nn.Module):
 
         self.output_linear = nn.Linear(hidden_layers[-1], self.n_features - len(self.categorical_values))
 
-    def forward(self, x, hidden_states=None) -> Union[Tuple[torch.Tensor, Tuple], torch.Tensor]:
+    def forward(self, x, hidden_states=None):
         x = self.embed(x)
         x = self.input_linear(x)
         x = self.activation(x)
@@ -58,10 +58,7 @@ class PredictionModel(nn.Module):
             out = layer(x)
             outputs.append(out)
 
-        if hidden_states is not None:
-            return outputs, hidden_states
-        else:
-            return outputs
+        return outputs, hidden_states
 
     def scale(self, target):
         if self.scalar is None:
@@ -71,10 +68,7 @@ class PredictionModel(nn.Module):
 
     def predict(self, batch: torch.Tensor, hidden_states: torch.Tensor = None) -> Union[
         Tuple[torch.Tensor, Tuple], torch.Tensor]:
-        if hidden_states is not None:
-            intermediate, hidden_states = self.forward(batch, hidden_states)
-        else:
-            intermediate = self.forward(batch)
+        intermediate, hidden_states = self.forward(batch, hidden_states)
 
         output = torch.zeros(batch.shape[1:])
         continuous_outputs = self.output_linear(intermediate)

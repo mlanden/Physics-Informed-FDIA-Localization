@@ -66,7 +66,7 @@ class SWATDataset(ICSDataset):
         else:
             return (np.array(self.features[item, :], dtype=np.float32),
                     np.array(self.features[item + 1, :], dtype=np.float32),
-                    self.labels)
+                    self.labels.to_numpy()[item])
 
     def get_data(self):
         return self.features, self.labels

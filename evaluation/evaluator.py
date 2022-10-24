@@ -14,13 +14,16 @@ from utils import save_results
 class Evaluator(ABC):
     def __init__(self, conf: dict, dataset: ICSDataset):
         self.categorical_features = dataset.get_categorical_features()
-        self.dataset = DataLoader(dataset)
+        self.dataset = dataset
         self.conf = conf
         self.checkpoint = conf["train"]["checkpoint"]
         self.results_path = path.join("results", self.checkpoint)
 
     @abstractmethod
     def alert(self, state, target):
+        pass
+
+    def close(self):
         pass
 
     def evaluate(self):
@@ -36,7 +39,7 @@ class Evaluator(ABC):
         attack_detected = False
 
         step = 0
-        for features, target, attack in self.dataset:
+        for features, target, attack in DataLoader(self.dataset):
             # if step == 5000:
             #     break
             if attack_start > -1 and not attack:
@@ -49,13 +52,14 @@ class Evaluator(ABC):
             if attack_detected:
                 # Already detected attack
                 continue
+
             labels.append(1 if attack else 0)
             if attack_start == -1 and attack:
                 attack_start = step
 
             start = time.time()
             alert = self.alert(features, target)
-            print(f"Alerting took {time.time() - start} seconds")
+            # print(f"Alerting took {time.time() - start} seconds")
             if attack:
                 if alert:
                     delay = step - attack_start
@@ -71,8 +75,12 @@ class Evaluator(ABC):
             msg = f"{step :5d} / {len(self.dataset)}: TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}"
             if len(delays) > 0:
                 msg += f", Dwell: {np.mean(delays):.3f}"
-            # print(f"\r", msg, end="")
+            print(f"\r", msg, end="")
+            # print(msg)
+            if step == 1000:
+                break
         print()
+        self.close()
 
-        save_results(tn, scores, fn, delays, fp, tp, labels, self.results_path)
+        save_results(tp, tn, fp, fn, labels, self.results_path, scores, delays)
 

@@ -4,8 +4,8 @@ task: train
 #task: predicates
 #task: invariants
 data:
-  normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
-#  normal: ../Datasets/SWAT/First_Hour_2015.csv
+#  normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
+  normal: ../Datasets/SWAT/First_Hour_2015.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
   attack: ../Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
@@ -20,17 +20,18 @@ model:
   window_size: 20
 
 train:
-  n_workers: 1
+  n_workers: 2
+  cuda: 0
   batch_size: 64
-  epochs: 1
+  epochs: 10
   lr: 0.0005
   regularization: 0.00001
-  checkpoint: swat_2015_full
+  checkpoint: swat_2015_full_invariant
   load_checkpoint: 0
 
   tensorboard: 1
   train_fraction: 0.4
-  validate_fraction: 0.1
+  validate_fraction: 0.001
   find_error_fraction: 0.5
   validation_frequency: 10
   loss: invariant
@@ -41,4 +42,5 @@ train:
   theta: 0.1
   max_depth: 2
   min_confidence: 0.8
-  type: invariants
+#  type: invariants
+  type: prediction

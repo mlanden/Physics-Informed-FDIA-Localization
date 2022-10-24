@@ -24,7 +24,7 @@ class CategoricalPredicate(Predicate):
         """
         return states[:, self.idx] == self.class_value
 
-    def confidence(self, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states, network_outputs: torch.Tensor) -> torch.Tensor:
         """ Returns the cross entropy between the given class logits and the target class
 
         Parameters
