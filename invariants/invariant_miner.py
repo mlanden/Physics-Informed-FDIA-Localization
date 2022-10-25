@@ -43,12 +43,12 @@ class InvariantMiner:
         print(f"Loaded {len(self.predicates)} predicates")
 
         self.index_to_predicate, self.predicate_to_index = self.create_mappings()
-        self.assign_path = path.join("checkpoint", self.checkpoint, "assigned_predicates.pkl")
-        self.count_path = path.join("checkpoint", self.checkpoint, "count_predicates.pkl")
-        self.sets_path = path.join("checkpoint", self.checkpoint, "predicate_sets.pkl")
-        self.counts_path = path.join("checkpoint", self.checkpoint, "predicate_counts.pkl")
-        self.tree_path = path.join("checkpoint", self.checkpoint, "tree.pkl")
-        self.invariants_path = path.join("checkpoint", self.checkpoint, "invariants.pkl")
+        self.assign_path = path.join(self.checkpoint, "assigned_predicates.pkl")
+        self.count_path = path.join(self.checkpoint, "count_predicates.pkl")
+        self.sets_path = path.join(self.checkpoint, "predicate_sets.pkl")
+        self.counts_path = path.join(self.checkpoint, "predicate_counts.pkl")
+        self.tree_path = path.join(self.checkpoint, "tree.pkl")
+        self.invariants_path = path.join(conf["train"]["invariant_path"] + "_invariants.pkl")
         self.result_path = path.join("results", self.checkpoint, "invariants")
 
         self.predicate_counts = None

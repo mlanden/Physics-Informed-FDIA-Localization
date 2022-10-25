@@ -42,9 +42,9 @@ def invariant_loss(batch: torch.Tensor, outputs: torch.Tensor, target: torch.Ten
     losses = torch.zeros((len(invariants)))
     for i, invariant in enumerate(invariants):
         losses[i] = invariant.confidence(batch, outputs)
-        if not dist.is_initialized() or dist.get_rank() == 0:
-            print("\r", end="")
-            print(f"{i + 1} / {len(invariants)} invariants evaluated", flush=True, end="")
+        # if not dist.is_initialized() or dist.get_rank() == 0:
+            # print("\r", end="")
+            # print(f"{i + 1} / {len(invariants)} invariants evaluated", flush=True, end="")
     if not dist.is_initialized() or dist.get_rank() == 0:
         print()
 

@@ -17,9 +17,9 @@ class NNEvaluator(Evaluator):
         super(NNEvaluator, self).__init__(conf, dataset)
         print(f"Number of samples: {len(dataset)}")
 
-        self.model_path = path.join("checkpoint", self.checkpoint, "model.pt")
-        self.normal_behavior_path = path.join("checkpoint", self.checkpoint, "normal_behavior.pt")
-        self.invariants_path = path.join("checkpoint", self.checkpoint, "invariants.pkl")
+        self.model_path = path.join(self.checkpoint, "model.pt")
+        self.normal_behavior_path = path.join(self.checkpoint, "normal_behavior.pt")
+        self.invariants_path = path.join(conf["train"]["invariant_path"] + "_invariants.pkl")
         n_workers = conf["train"]['n_workers']
 
         info = torch.load(self.model_path)

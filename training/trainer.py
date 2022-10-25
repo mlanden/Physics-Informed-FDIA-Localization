@@ -6,6 +6,8 @@ import joblib
 import time
 import os
 from os import path
+
+import ray
 from tqdm import tqdm
 import matplotlib
 
@@ -21,6 +23,8 @@ from torch.nn.parallel.distributed import DistributedDataParallel as DDP
 from torch import optim
 from torch import multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
+
+from ray import tune
 
 from models import *
 from datasets import *
@@ -48,10 +52,10 @@ class Trainer:
         self.use_tensorboard = conf["train"]["tensorboard"]
         self.n_workers = conf["train"]['n_workers']
 
-        self.model_path = path.join("checkpoint", self.checkpoint, "model.pt")
-        self.scalar_path = path.join("checkpoint", self.checkpoint, "scaler.gz")
-        self.normal_behavior_path = path.join("checkpoint", self.checkpoint, "normal_behavior.pt")
-        self.invariants_path = path.join("checkpoint", self.checkpoint, "invariants.pkl")
+        self.model_path = path.join(self.checkpoint, "model.pt")
+        self.scalar_path = path.join(self.checkpoint, "scaler.gz")
+        self.normal_behavior_path = path.join(self.checkpoint, "normal_behavior.pt")
+        self.invariants_path = path.join(conf["train"]["invariant_path"] + "_invariants.pkl")
         self.results_path = path.join("results", self.checkpoint)
         self.loss = conf["train"]["loss"]
         self.invariants = None
@@ -88,7 +92,12 @@ class Trainer:
             "optimizer": self.optimizer,
             "epoch": epoch
         }
-        torch.save(info, self.model_path)
+        if ray.is_initialized():
+            with tune.checkpoint_dir(epoch) as checkpoint_dir:
+                checkpoint = path.join(checkpoint_dir, "checkpoint")
+                torch.save(info, checkpoint)
+        else:
+            torch.save(info, self.model_path)
         print(f"Model saved at epoch {epoch}", flush=True)
 
     def train_prediction(self):
@@ -101,7 +110,8 @@ class Trainer:
                      nprocs=self.n_workers)
 
     def _train(self):
-        signal.signal(signal.SIGINT, quit)
+        if not ray.is_initialized():
+            signal.signal(signal.SIGINT, quit)
         train_sampler = None
         validation_sampler = None
         datalen = len(self.dataset)
@@ -136,7 +146,7 @@ class Trainer:
             else:
                 self.model = DDP(self.model)
 
-        writer = SummaryWriter("tf_board/" + self.checkpoint) if self.use_tensorboard else None
+        writer = SummaryWriter("tf_board/" + self.checkpoint.split(path.sep)[-1]) if self.use_tensorboard else None
         start = time.time()
         for i in range(epoch, self.epochs):
             if dist.is_initialized():
@@ -173,7 +183,7 @@ class Trainer:
                 print(f"Loss: {epoch_loss / len(loader)}, {length} seconds", flush=True)
                 self.save_checkpoint(i + 1)
 
-            if self.validation_frequency > 0 and (i + 1) % self.validation_frequency == 0:
+            if len(validation_data) > 0 and (i + 1) % self.validation_frequency == 0:
                 self.model.eval()
                 val_loss = torch.zeros((1, ))
                 if validation_sampler is not None:
@@ -192,10 +202,13 @@ class Trainer:
                     dist.reduce(val_loss, dst=0)
                     val_loss /= self.n_workers
 
+                val_loss = val_loss.cpu().item()
                 if self.use_tensorboard:
-                    writer.add_scalar("Loss/validation", val_loss.cpu().item(), i)
+                    writer.add_scalar("Loss/validation", val_loss, i)
 
                 if not dist.is_initialized() or dist.get_rank() == 0:
+                    if ray.is_initialized():
+                        tune.report(loss=val_loss)
                     print(f"Epoch {i : 3d} Validation loss: {val_loss}", flush=True)
 
         if not dist.is_initialized() or dist.get_rank() == 0:

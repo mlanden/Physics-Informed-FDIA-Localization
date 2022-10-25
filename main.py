@@ -5,7 +5,7 @@ import sys
 import torch
 
 from datasets import SWATDataset
-from training import Trainer
+from training import Trainer, hyperparameter_optimize
 from evaluation import NNEvaluator
 from invariants import generate_predicates, InvariantMiner
 
@@ -39,6 +39,12 @@ if __name__ == '__main__':
                               load_scaler=False)
         trainer = Trainer(conf, dataset, device)
         trainer.train_prediction()
+    elif task == "hyperparameter_optimize":
+        dataset = SWATDataset(conf, conf["data"]["normal"],
+                              sequence_len=conf["model"]["sequence_length"],
+                              train=True,
+                              load_scaler=False)
+        hyperparameter_optimize(conf, dataset, device)
     elif task == "error":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=1,
