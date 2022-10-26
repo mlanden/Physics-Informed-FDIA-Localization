@@ -20,20 +20,21 @@ model:
   window_size: 20
 
 train:
-  n_workers: 8
+  n_workers: 1
+  cuda: 0
   batch_size: 32
   epochs: 20
   lr: 0.0005
   regularization: 0.00001
-  checkpoint: swat_2015_full
+  checkpoint: swat_2015_full_
   load_checkpoint: 0
 
   tensorboard: 1
   train_fraction: 0.1
-  validate_fraction: 0.1
+  validate_fraction: 0.01
   find_error_fraction: 0.5
-  validation_frequency: 10
-  loss: invariant
+  validation_frequency: 1
+  loss: invariant_gpu
   max_gmm_components: 5
   distribution_threshold: 1.2
   event_predicate_error: 0.0001

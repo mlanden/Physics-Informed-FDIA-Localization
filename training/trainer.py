@@ -99,6 +99,15 @@ class Trainer:
 
     def _train(self):
         signal.signal(signal.SIGINT, quit)
+        cuda = self.conf["train"]["cuda"]
+        if cuda:
+            if self.n_workers > 1:
+                device = torch.device(f"cuda:{dist.get_rank()}")
+            else:
+                device = torch.device("cuda:1")
+        else:
+            device = torch.device("cpu")
+
         train_sampler = None
         validation_sampler = None
         datalen = len(self.dataset)
@@ -115,7 +124,7 @@ class Trainer:
         epoch = self.create_prediction_model(train=True)
         if not dist.is_initialized():
             train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True)
-            validation_data = DataLoader(validation_data)
+            validation_data = DataLoader(validation_data, batch_size=self.batch_size)
         else:
             train_sampler = DistributedSampler(train_data, num_replicas=self.n_workers,
                                                rank=dist.get_rank(),
@@ -133,6 +142,7 @@ class Trainer:
         for i in range(epoch, self.epochs):
             if dist.is_initialized():
                 train_sampler.set_epoch(i)
+            start_batch = time.time()
             self.model.train()
             epoch_loss = torch.tensor(0.0)
 
@@ -142,6 +152,8 @@ class Trainer:
             else:
                 loader = train_data
             for seq, target in loader:
+                seq = seq.to(device)
+                target.to(device)
                 losses = self.compute_loss(seq, target)
                 loss = torch.sum(losses, dim=1)
 
@@ -158,19 +170,26 @@ class Trainer:
                 writer.add_scalar("Loss/train", epoch_loss.item(), i)
 
             if not dist.is_initialized() or dist.get_rank() == 0:
-                length = time.time() - start
+                length = time.time() - start_batch
                 print(f"Loss: {epoch_loss / len(loader)}, {length} seconds", flush=True)
                 self.save_checkpoint(i + 1)
 
             if self.validation_frequency > 0 and i % self.validation_frequency == 0:
                 self.model.eval()
+                if not dist.is_initialized() or dist.get_rank() == 0:
+                    loader = tqdm(validation_data)
+                else:
+                    loader = validation_data
+
                 val_loss = torch.tensor(0.0)
                 if validation_sampler is not None:
                     validation_sampler.set_epoch(i)
-                for seq, target in validation_data:
+                for seq, target in loader:
+                    seq = seq.to(device)
+                    target = target.to(device)
                     losses = self.compute_loss(seq, target)
                     loss = torch.sum(losses)
-                    val_loss += loss.detach()
+                    val_loss += loss.item()
 
                 val_loss /= len(validation_data)
                 if dist.is_initialized():
@@ -178,7 +197,7 @@ class Trainer:
                     val_loss /= self.n_workers
 
                 if self.use_tensorboard:
-                    writer.add_scalar("Loss/validation", val_loss, i)
+                    writer.add_scalar("Loss/validation", val_loss.item(), i)
 
                 if not dist.is_initialized() or dist.get_rank() == 0:
                     print(f"Epoch {i : 3d} Validation loss: {val_loss}", flush=True)

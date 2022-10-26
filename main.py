@@ -5,7 +5,7 @@ import sys
 import torch
 
 from datasets import SWATDataset
-from training import Trainer, hyperparameter_optimize
+from training import Trainer
 from evaluation import NNEvaluator
 from invariants import generate_predicates, InvariantMiner
 
@@ -26,31 +26,26 @@ if __name__ == '__main__':
 
     task = conf["task"]
     print("Task:", task)
-    cuda = conf["train"]["cuda"]
-    if cuda:
-        device = torch.device("gpu:")
-    else:
-        device = torch.device("cpu")
 
     if task == "train":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=conf["model"]["sequence_length"],
                               train=True,
                               load_scaler=False)
-        trainer = Trainer(conf, dataset, device)
+        trainer = Trainer(conf, dataset)
         trainer.train_prediction()
     elif task == "hyperparameter_optimize":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=conf["model"]["sequence_length"],
                               train=True,
                               load_scaler=False)
-        hyperparameter_optimize(conf, dataset, device)
+        hyperparameter_optimize(conf, dataset)
     elif task == "error":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=1,
                               train=True,
                               load_scaler=True)
-        trainer = Trainer(conf, dataset, device)
+        trainer = Trainer(conf, dataset)
         trainer.find_normal_error()
     elif task == "test":
         dataset = SWATDataset(conf, conf["data"]["attack"],
