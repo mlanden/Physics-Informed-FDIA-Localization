@@ -1,4 +1,5 @@
-task: train
+#task: train
+task: "hyperparameter_optimize"
 #task: error
 #task: test
 #task: predicates
@@ -20,10 +21,10 @@ model:
   window_size: 20
 
 train:
-  n_workers: 1
+  n_workers: 2
   cuda: 0
   batch_size: 32
-  epochs: 20
+  epochs: 3
   lr: 0.0005
   regularization: 0.00001
   checkpoint: swat_2015_full_

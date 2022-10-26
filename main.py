@@ -5,7 +5,7 @@ import sys
 import torch
 
 from datasets import SWATDataset
-from training import Trainer
+from training import Trainer, hyperparameter_optimize
 from evaluation import NNEvaluator
 from invariants import generate_predicates, InvariantMiner
 

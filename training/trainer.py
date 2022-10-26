@@ -11,7 +11,7 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-from sklearn.metrics import roc_curve
+import optuna
 
 import numpy as np
 import torch
@@ -59,6 +59,8 @@ class Trainer:
                 self.invariants = pickle.load(fd)
         self.loss_fns = get_losses(self.dataset, self.invariants)
 
+        self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
+
     def create_prediction_model(self, train=False):
         epoch = 0
         if self.load_checkpoint or not train:
@@ -90,14 +92,14 @@ class Trainer:
 
     def train_prediction(self):
         if self.n_workers == 1:
-            self._train()
+            self.train()
         else:
             print(f"Launching {self.n_workers} trainers")
             mp.set_sharing_strategy("file_system")
-            mp.spawn(launch_distributed, args=(self.n_workers, self._train),
+            mp.spawn(launch_distributed, args=(self.n_workers, self.train),
                      nprocs=self.n_workers)
 
-    def _train(self):
+    def train(self, trial: optuna.Trial = None):
         signal.signal(signal.SIGINT, quit)
         cuda = self.conf["train"]["cuda"]
         if cuda:
@@ -122,7 +124,7 @@ class Trainer:
         validation_data = Subset(self.dataset, val_idx)
 
         epoch = self.create_prediction_model(train=True)
-        if not dist.is_initialized():
+        if self:
             train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True)
             validation_data = DataLoader(validation_data, batch_size=self.batch_size)
         else:
@@ -138,6 +140,7 @@ class Trainer:
             self.model = DDP(self.model)
 
         writer = SummaryWriter("tf_board/" + self.checkpoint) if self.use_tensorboard else None
+        val_loss = torch.tensor(0.0)
         start = time.time()
         for i in range(epoch, self.epochs):
             if dist.is_initialized():
@@ -147,11 +150,12 @@ class Trainer:
             epoch_loss = torch.tensor(0.0)
 
             if not dist.is_initialized() or dist.get_rank() == 0:
-                loader = tqdm(train_data)
                 print(f"Epoch {i :3d} / {self.epochs}", flush=True)
+                loader = tqdm(train_data)
             else:
                 loader = train_data
             for seq, target in loader:
+                self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
                 seq = seq.to(device)
                 target.to(device)
                 losses = self.compute_loss(seq, target)
@@ -185,6 +189,7 @@ class Trainer:
                 if validation_sampler is not None:
                     validation_sampler.set_epoch(i)
                 for seq, target in loader:
+                    self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
                     seq = seq.to(device)
                     target = target.to(device)
                     losses = self.compute_loss(seq, target)
@@ -196,6 +201,11 @@ class Trainer:
                     dist.reduce(val_loss, dst=0)
                     val_loss /= self.n_workers
 
+                if trial is not None:
+                    trial.report(val_loss.item(), epoch)
+                    if trial.should_prune():
+                        raise optuna.TrialPruned()
+
                 if self.use_tensorboard:
                     writer.add_scalar("Loss/validation", val_loss.item(), i)
 
@@ -206,10 +216,13 @@ class Trainer:
             length = time.time() - start
             print(f"Training took {length :.3f} seconds")
 
-    def compute_loss(self, seq, target, hidden_states=None):
+        return val_loss.item()
+
+    def compute_loss(self, seq, target):
         loss = []
         for loss_fn in self.loss_fns:
-            losses = loss_fn(self.model, seq, target, self.dataset.get_categorical_features(), hidden_states)
+            losses, self.hidden_states = loss_fn(self.model, seq, target, self.dataset.get_categorical_features(),
+                                                 self.hidden_states)
             loss.append(losses.view(1, -1))
         return torch.concat(loss, dim=1)
 
@@ -223,9 +236,8 @@ class Trainer:
 
         loss_vectors = []
         with torch.no_grad():
-            hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
             for features, target in tqdm(normal_data):
-                losses = self.compute_loss(features, target, hidden_states)
+                losses = self.compute_loss(features, target)
 
                 loss_vectors.append(losses)
 

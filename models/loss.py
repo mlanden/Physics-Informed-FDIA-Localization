@@ -33,17 +33,11 @@ def swat_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_valu
             losses[i] = continuous_loss(predicted, target_value)
             continuous_idx += 1
 
-    if hidden_states is not None:
-        return losses, hidden_states
-    else:
-        return losses
+    return losses, hidden_states
 
 
 def evaluate_model(batch, hidden_states, model):
-    if hidden_states is not None:
-        outputs, hidden_states = model.forward(batch, hidden_states)
-    else:
-        outputs = model.forward(batch)
+    outputs, hidden_states = model.forward(batch, hidden_states)
     return hidden_states, outputs
 
 
@@ -53,15 +47,12 @@ def invariant_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical
 
     loss = torch.zeros((len(invariants)))
     for i, invariant in enumerate(invariants):
-        loss[i] = invariant.confidence(outputs)
+        loss[i] = invariant.confidence(batch, outputs)
     #     print("\r", end="")
     #     print(f"{i} / {len(invariants)} invariants evaluated", end="")
     # print()
 
-    if hidden_states is not None:
-        return loss, hidden_states
-    else:
-        return loss
+    return loss, hidden_states
 
 
 def get_losses(dataset: ICSDataset, invariants):

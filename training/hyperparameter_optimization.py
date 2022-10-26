@@ -1,47 +1,65 @@
+import sys
+import logging
 import os.path
 from functools import partial
-
-from ray import tune
-from ray.tune import CLIReporter
-from ray.tune.schedulers import ASHAScheduler
-from ray.tune.search.hyperopt import HyperOptSearch
-
+import os
+import optuna
+from torch import distributed as dist
 from .trainer import Trainer
+import torch.multiprocessing as mp
 
 
-def train(config, conf, dataset, device):
-    conf["train"]["lr"] = config["lr"]
-    conf["train"]["batch_size"] = config["batch_size"]
+def train(trial: optuna.Trial, conf, dataset):
+    if conf["train"]["n_workers"] > 1:
+        trial = optuna.integration.TorchDistributedTrial(trial)
+        conf["train"]["n_workers"] = 1
 
-    trainer = Trainer(conf, dataset, device)
-    trainer.train_prediction()
+    print("Train", dist.get_rank(), flush=True)
+    learning_rate = trial.suggest_float("Learning rate", 1e-5, 1e-2, log=True)
+    batch_size = 2 ** trial.suggest_int("batch_size", 5, 8)
+    conf["train"]["lr"] = learning_rate
+    conf["train"]["batch_size"] = batch_size
+
+    trainer = Trainer(conf, dataset)
+    return trainer.train()
 
 
-def hyperparameter_optimize(conf: dict, dataset, device):
-    space = {
-        "lr": tune.loguniform(1e-4, 1e-1),
-        "batch_size": tune.choice([2 ** i for i in range(4, 8)])
-    }
-    # search_alg = HyperOptSearch()
-    scheduler = ASHAScheduler()
-    reporter = CLIReporter(
-        metric_columns = ["loss"],
-        print_intermediate_tables = True,
-        max_report_frequency = 60,
-        )
-    result = tune.run(
-        partial(train, conf=conf, dataset=dataset, device=device),
-        resources_per_trial={"cpu": conf["train"]["n_workers"]},
-        num_samples=2,
-        scheduler=scheduler,
-        config=space,
-        # search_alg=search_alg,
-        metric="loss",
-        mode="min",
-        max_concurrent_trials=2,
-        # progress_reporter=reporter,
-    )
-    best_trial = result.get_best_trial("loss", "min", "last")
-    print("Best trial config: {}".format(best_trial.config))
-    print("Best trial final validation loss: {}".format(
-        best_trial.last_result["loss"]))
+def get_study():
+    study = optuna.create_study(pruner=optuna.pruners.MedianPruner())
+    return study
+
+
+def hyperparameter_optimize(conf: dict, dataset):
+    optuna.logging.get_logger("optuna").addHandler(logging.StreamHandler(sys.stdout))
+    n_workers = conf["train"]["n_workers"]
+    n_trials = 5
+
+    if n_workers > 1:
+        mp.spawn(launch_study, args=(conf, dataset, n_trials, n_workers), nprocs=n_workers)
+    else:
+        study = get_study()
+        study.optimize(partial(train, conf=conf, dataset=dataset), n_trials=2)
+        best_parameters = study.best_params
+        print(best_parameters)
+
+
+def launch_study(rank, conf, dataset, n_trials, world_size):
+    os.environ['MASTER_ADDR'] = '127.0.0.1'
+    os.environ['MASTER_PORT'] = '29500'
+    dist.init_process_group(dist.Backend.GLOO, rank=rank, world_size=world_size)
+    study = None
+    if rank == 0:
+        print("Rank 0")
+        study = get_study()
+        study.optimize(partial(train, conf=conf, dataset=dataset), n_trials=n_trials)
+    else:
+        print(f"Rank {rank}", flush=True)
+        for _ in range(n_trials):
+            try:
+                train(None, conf, dataset)
+            except optuna.TrialPruned:
+                pass
+
+    if rank == 0:
+        best_parameters = study.best_params
+        print(best_parameters)
