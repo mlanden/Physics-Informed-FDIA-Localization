@@ -1,12 +1,11 @@
 task: train
 #task: error
 #task: test
-#task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 data:
-#  normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
-  normal: ../Datasets/SWAT/First_Hour_2015.csv
+  normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
+#  normal: ../Datasets/SWAT/First_Hour_2015.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
   attack: ../Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
@@ -21,19 +20,19 @@ model:
   window_size: 20
 
 train:
-  n_workers: 1
-  cuda: 0
-  batch_size: 64
-  epochs: 100
+  n_workers: 8
+  batch_size: 32
+  epochs: 20
   lr: 0.0005
   regularization: 0.00001
+  checkpoint: swat_2015_full
   load_checkpoint: 0
 
   tensorboard: 1
-  train_fraction: 0.4
-  validate_fraction: 0.01
+  train_fraction: 0.1
+  validate_fraction: 0.1
   find_error_fraction: 0.5
-  validation_frequency: 1
+  validation_frequency: 10
   loss: invariant
   max_gmm_components: 5
   distribution_threshold: 1.2
@@ -42,7 +41,5 @@ train:
   theta: 0.1
   max_depth: 2
   min_confidence: 0.8
-#  type: invariants
-  type: prediction
-  invariant_path: /home/mlanden/ICS-Attack-Detection/checkpoint/swat
-  checkpoint: /home/mlanden/ICS-Attack-Detection/checkpoint/swat_2015_full_invariant
+  type: invariants
+  invariants: swat

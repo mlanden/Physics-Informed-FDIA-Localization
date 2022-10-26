@@ -6,8 +6,6 @@ import joblib
 import time
 import os
 from os import path
-
-import ray
 from tqdm import tqdm
 import matplotlib
 
@@ -24,18 +22,15 @@ from torch import optim
 from torch import multiprocessing as mp
 from torch.utils.tensorboard import SummaryWriter
 
-from ray import tune
-
 from models import *
 from datasets import *
 from utils import launch_distributed
 
 
 class Trainer:
-    def __init__(self, conf: dict, dataset: ICSDataset, device: torch.device):
+    def __init__(self, conf: dict, dataset: ICSDataset):
         self.conf = conf
         self.dataset = dataset
-        self.device = device
         self.optimizer = None
         self.model = None
 
@@ -52,10 +47,10 @@ class Trainer:
         self.use_tensorboard = conf["train"]["tensorboard"]
         self.n_workers = conf["train"]['n_workers']
 
-        self.model_path = path.join(self.checkpoint, "model.pt")
-        self.scalar_path = path.join(self.checkpoint, "scaler.gz")
-        self.normal_behavior_path = path.join(self.checkpoint, "normal_behavior.pt")
-        self.invariants_path = path.join(conf["train"]["invariant_path"] + "_invariants.pkl")
+        self.model_path = path.join("checkpoint", self.checkpoint, "model.pt")
+        self.scalar_path = path.join("checkpoint", self.checkpoint, "scaler.gz")
+        self.normal_behavior_path = path.join("checkpoint", self.checkpoint, "normal_behavior.pt")
+        self.invariants_path = path.join("checkpoint", conf["train"]["invariants"] + "_invariants.pkl")
         self.results_path = path.join("results", self.checkpoint)
         self.loss = conf["train"]["loss"]
         self.invariants = None
@@ -63,7 +58,6 @@ class Trainer:
             with open(self.invariants_path, "rb") as fd:
                 self.invariants = pickle.load(fd)
         self.loss_fns = get_losses(self.dataset, self.invariants)
-        self.hidden_states = None
 
     def create_prediction_model(self, train=False):
         epoch = 0
@@ -73,12 +67,12 @@ class Trainer:
             self.optimizer = info["optimizer"]
             epoch = info["epoch"]
         else:
-            self.model = PredictionModel(self.conf, self.dataset).to(self.device)
-            lr = self.learning_rate * self.n_workers
+            self.model = PredictionModel(self.conf, self.dataset)
+
             if self.decay > 0:
-                self.optimizer = optim.Adam(self.model.parameters(), lr=lr, weight_decay=self.decay)
+                self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.decay)
             else:
-                self.optimizer = optim.Adam(self.model.parameters(), lr=lr)
+                self.optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)
 
         return epoch
 
@@ -92,26 +86,19 @@ class Trainer:
             "optimizer": self.optimizer,
             "epoch": epoch
         }
-        if ray.is_initialized():
-            with tune.checkpoint_dir(epoch) as checkpoint_dir:
-                checkpoint = path.join(checkpoint_dir, "checkpoint")
-                torch.save(info, checkpoint)
-        else:
-            torch.save(info, self.model_path)
-        print(f"Model saved at epoch {epoch}", flush=True)
+        torch.save(info, self.model_path)
 
     def train_prediction(self):
         if self.n_workers == 1:
             self._train()
         else:
-            mp.set_sharing_strategy("file_system")
             print(f"Launching {self.n_workers} trainers")
+            mp.set_sharing_strategy("file_system")
             mp.spawn(launch_distributed, args=(self.n_workers, self._train),
                      nprocs=self.n_workers)
 
     def _train(self):
-        if not ray.is_initialized():
-            signal.signal(signal.SIGINT, quit)
+        signal.signal(signal.SIGINT, quit)
         train_sampler = None
         validation_sampler = None
         datalen = len(self.dataset)
@@ -126,10 +113,9 @@ class Trainer:
         validation_data = Subset(self.dataset, val_idx)
 
         epoch = self.create_prediction_model(train=True)
-        GPU = torch.device("cpu") != self.device
         if not dist.is_initialized():
-            train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True, pin_memory=GPU)
-            validation_data = DataLoader(validation_data, pin_memory=GPU)
+            train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True)
+            validation_data = DataLoader(validation_data)
         else:
             train_sampler = DistributedSampler(train_data, num_replicas=self.n_workers,
                                                rank=dist.get_rank(),
@@ -138,31 +124,24 @@ class Trainer:
                                                     rank=dist.get_rank())
             train_data = DataLoader(train_data, batch_size=self.batch_size,
                                     shuffle=False,
-                                    sampler=train_sampler,
-                                    pin_memory=GPU)
-            validation_data = DataLoader(validation_data, sampler=validation_sampler, pin_memory=GPU)
-            if GPU:
-                self.model = DDP(self.model, device_ids=[dist.get_rank()])
-            else:
-                self.model = DDP(self.model)
+                                    sampler=train_sampler)
+            validation_data = DataLoader(validation_data, sampler=validation_sampler)
+            self.model = DDP(self.model)
 
-        writer = SummaryWriter("tf_board/" + self.checkpoint.split(path.sep)[-1]) if self.use_tensorboard else None
+        writer = SummaryWriter("tf_board/" + self.checkpoint) if self.use_tensorboard else None
         start = time.time()
         for i in range(epoch, self.epochs):
             if dist.is_initialized():
                 train_sampler.set_epoch(i)
             self.model.train()
-            epoch_loss = torch.zeros((1, ))
+            epoch_loss = torch.tensor(0.0)
 
             if not dist.is_initialized() or dist.get_rank() == 0:
-                print(f"Epoch {i + 1 :3d} / {self.epochs}", flush=True)
                 loader = tqdm(train_data)
+                print(f"Epoch {i :3d} / {self.epochs}", flush=True)
             else:
                 loader = train_data
             for seq, target in loader:
-                seq = seq.to(self.device)
-                target = target.to(self.device)
-                self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
                 losses = self.compute_loss(seq, target)
                 loss = torch.sum(losses, dim=1)
 
@@ -170,7 +149,7 @@ class Trainer:
                 loss.backward()
                 self.optimizer.step()
 
-                epoch_loss += loss
+                epoch_loss += loss.item()
 
             if dist.is_initialized():
                 dist.reduce(epoch_loss, dst=0)
@@ -183,44 +162,35 @@ class Trainer:
                 print(f"Loss: {epoch_loss / len(loader)}, {length} seconds", flush=True)
                 self.save_checkpoint(i + 1)
 
-            if len(validation_data) > 0 and (i + 1) % self.validation_frequency == 0:
+            if self.validation_frequency > 0 and i % self.validation_frequency == 0:
                 self.model.eval()
-                val_loss = torch.zeros((1, ))
+                val_loss = torch.tensor(0.0)
                 if validation_sampler is not None:
                     validation_sampler.set_epoch(i)
-
                 for seq, target in validation_data:
-                    self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
-                    seq = seq.to(self.device)
-                    target = target.to(self.device)
                     losses = self.compute_loss(seq, target)
                     loss = torch.sum(losses)
-                    val_loss += loss
+                    val_loss += loss.detach()
 
                 val_loss /= len(validation_data)
                 if dist.is_initialized():
                     dist.reduce(val_loss, dst=0)
                     val_loss /= self.n_workers
 
-                val_loss = val_loss.cpu().item()
                 if self.use_tensorboard:
                     writer.add_scalar("Loss/validation", val_loss, i)
 
                 if not dist.is_initialized() or dist.get_rank() == 0:
-                    if ray.is_initialized():
-                        tune.report(loss=val_loss)
                     print(f"Epoch {i : 3d} Validation loss: {val_loss}", flush=True)
 
         if not dist.is_initialized() or dist.get_rank() == 0:
             length = time.time() - start
             print(f"Training took {length :.3f} seconds")
 
-    def compute_loss(self, seq, target):
-        outputs, self.hidden_states = self.model(seq, self.hidden_states)
-
+    def compute_loss(self, seq, target, hidden_states=None):
         loss = []
         for loss_fn in self.loss_fns:
-            losses = loss_fn(seq, outputs, target, self.dataset.get_categorical_features())
+            losses = loss_fn(self.model, seq, target, self.dataset.get_categorical_features(), hidden_states)
             loss.append(losses.view(1, -1))
         return torch.concat(loss, dim=1)
 
@@ -229,23 +199,20 @@ class Trainer:
         size = int(self.find_error_fraction * len(self.dataset))
         idx = list(range(start, start + size))
         normal = Subset(self.dataset, idx)
-
-        pin = torch.device("cpu") != self.device
-        normal_data = DataLoader(normal, pin_memory=pin)
+        normal_data = DataLoader(normal)
         self.create_prediction_model()
 
         loss_vectors = []
         with torch.no_grad():
-            self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
+            hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
             for features, target in tqdm(normal_data):
-                features = features.to(self.device)
-                target = target.to(self.device)
-                losses = self.compute_loss(features, target)
+                losses = self.compute_loss(features, target, hidden_states)
+
                 loss_vectors.append(losses)
 
         loss_vectors = torch.concat(loss_vectors, 0)
-        means = torch.mean(loss_vectors, 0).cpu().numpy().flatten()
-        stds = torch.std(loss_vectors, 0).cpu().numpy().flatten()
+        means = torch.mean(loss_vectors, 0).numpy().flatten()
+        stds = torch.std(loss_vectors, 0).numpy().flatten()
         print(means)
         print(stds)
 
@@ -256,6 +223,16 @@ class Trainer:
         }
         torch.save(obj, self.normal_behavior_path)
         print("Normal behavior saved")
+
+        # fpr, tpr, thresholds = roc_curve(labels, scores)
+        #
+        # fig, ax = plt.subplots()
+        #
+        # ax.plot(fpr, tpr)
+        # ax.set(xlabel="False Positive Rate",
+        #        ylabel="True Positive Rate",
+        #        title="ROC Curve")
+        # plt.savefig(path.join(self.results_path, "roc.png"))
 
     def plot_loss_dist(self, means, stds):
         fig, (mean_ax, std_ax) = plt.subplots(1, 2)
