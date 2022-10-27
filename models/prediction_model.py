@@ -10,12 +10,12 @@ from utils import activations
 
 class PredictionModel(nn.Module):
 
-    def __init__(self, conf, dataset):
+    def __init__(self, conf, categorical_values):
         super().__init__()
         self.checkpoint = conf["train"]["checkpoint"]
         self.scalar_path = path.join("checkpoint", self.checkpoint, "scaler.gz")
         self.scalar = None
-        self.categorical_values = dataset.get_categorical_features()
+        self.categorical_values = categorical_values
 
         hidden_layers = conf["model"]["hidden_layers"]
         self.n_features = conf["data"]["n_features"]

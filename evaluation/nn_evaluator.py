@@ -6,7 +6,7 @@ import queue
 import multiprocessing as mp
 
 from datasets import ICSDataset, SWATDataset
-from models import swat_loss
+from models import prediction_loss
 from .evaluator import Evaluator
 from models import get_losses
 from invariants import Invariant

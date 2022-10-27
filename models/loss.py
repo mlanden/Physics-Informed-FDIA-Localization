@@ -7,7 +7,7 @@ from invariants import Invariant
 from datasets import ICSDataset, SWATDataset
 
 
-def swat_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_values: dict, hidden_states=None) -> Union[
+def prediction_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_values: dict, hidden_states=None) -> Union[
     Tuple[torch.Tensor, Tuple], torch.Tensor]:
     hidden_states, outputs = evaluate_model(batch, hidden_states, model)
 
@@ -55,12 +55,8 @@ def invariant_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical
     return loss, hidden_states
 
 
-def get_losses(dataset: ICSDataset, invariants):
-    loss_fns = []
-    if isinstance(dataset, SWATDataset):
-        loss_fns.append(swat_loss)
-    else:
-        raise RuntimeError("Unknown model type")
+def get_losses(invariants):
+    loss_fns = [prediction_loss]
 
     if invariants is not None:
         loss_fns.append(partial(invariant_loss, invariants=invariants))

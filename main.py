@@ -3,11 +3,34 @@ from os import path
 import yaml
 import sys
 import torch
+from pytorch_lightning import Trainer
+from torch.utils.data import Subset, DataLoader
 
 from datasets import SWATDataset
-from training import Trainer, hyperparameter_optimize
+from training import hyperparameter_optimize, ICSTrainer
 from evaluation import NNEvaluator
 from invariants import generate_predicates, InvariantMiner
+
+def train():
+    trainer = Trainer()
+
+    dataset = SWATDataset(conf, conf["data"]["normal"],
+                          sequence_len=conf["model"]["sequence_length"],
+                          train=True,
+                          load_scaler=False)
+    datalen = len(dataset)
+    train_len = int(datalen * train_fraction)
+    train_idx = list(range(0, train_len))
+    train_data = Subset(dataset, train_idx)
+    val_len = int(datalen * validate_fraction)
+    val_idx = list(range(train_len, train_len + val_len))
+    validation_data = Subset(dataset, val_idx)
+
+    train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
+    val_loader = DataLoader(validation_data, batch_size=batch_size, shuffle=False, drop_last=False)
+    model = ICSTrainer(conf, dataset.get_categorical_features())
+    trainer.fit(model, train_loader, val_loader)
+
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:
@@ -26,14 +49,14 @@ if __name__ == '__main__':
 
     task = conf["task"]
     print("Task:", task)
+    train_fraction = conf["train"]["train_fraction"]
+    validate_fraction = conf["train"]["validate_fraction"]
+    batch_size = conf["train"]["batch_size"]
+    checkpoint = conf["train"]["checkpoint"]
+    load_checkpoint = conf["train"]["load_checkpoint"]
 
     if task == "train":
-        dataset = SWATDataset(conf, conf["data"]["normal"],
-                              sequence_len=conf["model"]["sequence_length"],
-                              train=True,
-                              load_scaler=False)
-        trainer = Trainer(conf, dataset)
-        trainer.train_prediction()
+        train()
     elif task == "hyperparameter_optimize":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=conf["model"]["sequence_length"],

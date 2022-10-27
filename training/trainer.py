@@ -124,7 +124,7 @@ class Trainer:
         validation_data = Subset(self.dataset, val_idx)
 
         epoch = self.create_prediction_model(train=True)
-        if self:
+        if self.n_workers == 1:
             train_data = DataLoader(train_data, batch_size=self.batch_size, shuffle=True)
             validation_data = DataLoader(validation_data, batch_size=self.batch_size)
         else:
