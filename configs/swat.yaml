@@ -1,6 +1,6 @@
-task: train
+#task: train
 #task: "hyperparameter_optimize"
-#task: error
+task: error
 #task: test
 #task: predicates
 #task: invariants
@@ -27,11 +27,11 @@ train:
   epochs: 3
   lr: 0.0005
   regularization: 0.00001
-  checkpoint: swat_2015_full_
+  checkpoint: swat_2015_full
   load_checkpoint: 0
 
   tensorboard: 1
-  train_fraction: 0.1
+  train_fraction: 0.01
   validate_fraction: 0.01
   find_error_fraction: 0.5
   validation_frequency: 1

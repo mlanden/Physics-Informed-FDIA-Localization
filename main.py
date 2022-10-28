@@ -4,6 +4,7 @@ import yaml
 import sys
 import torch
 from pytorch_lightning import Trainer
+from pytorch_lightning.callbacks import ModelCheckpoint
 from torch.utils.data import Subset, DataLoader
 
 from datasets import SWATDataset
@@ -11,9 +12,12 @@ from training import hyperparameter_optimize, ICSTrainer
 from evaluation import NNEvaluator
 from invariants import generate_predicates, InvariantMiner
 
-def train():
-    trainer = Trainer()
 
+def train():
+    trainer = Trainer(callbacks=[ModelCheckpoint(dirpath=checkpoint_dir,
+                                                 filename=checkpoint,
+                                                 save_last=True)],
+                      max_epochs=2)
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           sequence_len=conf["model"]["sequence_length"],
                           train=True,
@@ -29,7 +33,28 @@ def train():
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
     val_loader = DataLoader(validation_data, batch_size=batch_size, shuffle=False, drop_last=False)
     model = ICSTrainer(conf, dataset.get_categorical_features())
-    trainer.fit(model, train_loader, val_loader)
+    if load_checkpoint:
+        trainer.fit(model, train_loader, val_loader,
+                    ckpt_path=checkpoint_to_load)
+    else:
+        trainer.fit(model, train_loader, val_loader)
+
+
+def find_normal_error():
+    trainer = Trainer(default_root_dir=checkpoint_dir)
+    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load)
+
+    dataset = SWATDataset(conf, conf["data"]["normal"],
+                          sequence_len=1,
+                          train=True,
+                          load_scaler=True)
+    start = int((train_fraction + validate_fraction) * len(dataset))
+    size = int(find_error_fraction * len(dataset))
+    idx = list(range(start, start + size))
+    normal = Subset(dataset, idx)
+    loader = DataLoader(normal)
+
+    trainer.test(model, loader)
 
 
 if __name__ == '__main__':
@@ -40,7 +65,11 @@ if __name__ == '__main__':
     conf_path = sys.argv[1]
     with open(conf_path, "r") as fd:
         conf = yaml.safe_load(fd)
-    checkpoint_dir = path.join("checkpoint", conf["train"]["checkpoint"])
+    checkpoint = conf["train"]["checkpoint"]
+    # checkpoint_to_load = "/home/mlanden/ICS-Attack-Detection/checkpoint/swat_2015_full/swat_2015_full-v1.ckpt"
+
+    checkpoint_dir = path.join("checkpoint", checkpoint)
+    checkpoint_to_load = path.join(checkpoint_dir, "last.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -52,8 +81,9 @@ if __name__ == '__main__':
     train_fraction = conf["train"]["train_fraction"]
     validate_fraction = conf["train"]["validate_fraction"]
     batch_size = conf["train"]["batch_size"]
-    checkpoint = conf["train"]["checkpoint"]
     load_checkpoint = conf["train"]["load_checkpoint"]
+    checkpoint_path = checkpoint_dir + ".ckpt"
+    find_error_fraction = conf["train"]["find_error_fraction"]
 
     if task == "train":
         train()
@@ -64,12 +94,7 @@ if __name__ == '__main__':
                               load_scaler=False)
         hyperparameter_optimize(conf, dataset)
     elif task == "error":
-        dataset = SWATDataset(conf, conf["data"]["normal"],
-                              sequence_len=1,
-                              train=True,
-                              load_scaler=True)
-        trainer = Trainer(conf, dataset)
-        trainer.find_normal_error()
+        find_normal_error()
     elif task == "test":
         dataset = SWATDataset(conf, conf["data"]["attack"],
                               sequence_len=1,
