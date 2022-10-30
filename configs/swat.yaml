@@ -21,7 +21,7 @@ model:
   window_size: 20
 
 train:
-  n_workers: 2
+  n_workers: 1
   cuda: 0
   batch_size: 32
   epochs: 3
@@ -35,7 +35,7 @@ train:
   validate_fraction: 0.01
   find_error_fraction: 0.5
   validation_frequency: 1
-  loss: invariant_gpu
+  loss: invariant
   max_gmm_components: 5
   distribution_threshold: 1.2
   event_predicate_error: 0.0001
@@ -43,5 +43,5 @@ train:
   theta: 0.1
   max_depth: 2
   min_confidence: 0.8
-  type: invariants
+  type: prediction
   invariants: swat

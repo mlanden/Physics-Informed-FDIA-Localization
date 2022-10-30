@@ -27,6 +27,8 @@ class DistributionPredicate(Predicate):
 
     def confidence(self, input_states, network_outputs: torch.Tensor) -> torch.Tensor:
         continuous_outputs = network_outputs[0]
+        if len(continuous_outputs.shape) == 1:
+            continuous_outputs = continuous_outputs.view(1, -1)
         total = torch.zeros(continuous_outputs.shape[0])
         for i in range(len(self.distributions)):
             log_prob = self.distributions[i].log_prob(continuous_outputs[:, self.continuous_idx])

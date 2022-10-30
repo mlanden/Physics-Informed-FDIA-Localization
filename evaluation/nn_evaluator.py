@@ -13,17 +13,16 @@ from invariants import Invariant
 
 
 class NNEvaluator(Evaluator):
-    def __init__(self, conf: dict, dataset: ICSDataset):
+    def __init__(self, conf: dict, model: torch.nn.Module,  dataset: ICSDataset):
         super(NNEvaluator, self).__init__(conf, dataset)
         print(f"Number of samples: {len(dataset)}")
 
-        self.model_path = path.join(self.checkpoint, "model.pt")
-        self.normal_behavior_path = path.join(self.checkpoint, "normal_behavior.pt")
-        self.invariants_path = path.join(conf["train"]["invariant_path"] + "_invariants.pkl")
-        n_workers = conf["train"]['n_workers']
+        self.model_path = path.join(self.checkpoint_dir, "model.pt")
+        self.normal_behavior_path = path.join(self.checkpoint_dir, "normal_behavior.pt")
+        self.invariants_path = path.join("checkpoint", conf["train"]["invariants"] + "_invariants.pkl")
+        self.n_workers = conf["train"]['n_workers']
 
-        info = torch.load(self.model_path)
-        self.model = info["model"]
+        self.model = model
         self.model.eval()
         obj = torch.load(self.normal_behavior_path)
         self.normal_means = obj["mean"]
@@ -43,7 +42,7 @@ class NNEvaluator(Evaluator):
             with open(self.invariants_path, "rb") as fd:
                 self.invariants = pickle.load(fd)
 
-            if n_workers > 1:
+            if self.n_workers > 1:
                 self.work_completed_events = [mp.Event() for _ in range(n_workers)]
                 self.tasks = mp.JoinableQueue()
                 self.results = mp.JoinableQueue()
@@ -56,14 +55,14 @@ class NNEvaluator(Evaluator):
                 self.workers = [mp.Process(target=evaluate_invariants, args=(i, self.invariants, self.input_queue, self.tasks,
                                                                              self.results, self.work_completed_events,
                                                                              self.start_work_event, self.end_workers_events))
-                                for i in range(n_workers)]
+                                for i in range(self.n_workers)]
                 for worker in self.workers:
                     worker.start()
         self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
-        if n_workers > 1:
-            self.loss_fns = get_losses(dataset, None, n_workers)
+        if self.n_workers > 1:
+            self.loss_fns = get_losses(None)
         else:
-            self.loss_fns = get_losses(dataset, self.invariants, n_workers)
+            self.loss_fns = get_losses(self.invariants)
 
     def close(self):
         if self.workers is not None:
@@ -79,6 +78,7 @@ class NNEvaluator(Evaluator):
         state = state.unsqueeze(0)
         losses = self.compute_loss(state, target)
         losses = losses.detach()
+        print(losses.shape, self.normal_means.shape, self.normal_stds.shape)
         score = torch.abs(losses - self.normal_means) / self.normal_stds
 
         # scores.append(score.item())
@@ -96,7 +96,7 @@ class NNEvaluator(Evaluator):
             loss.append(losses.view(1, -1))
 
         # Invariants
-        if len(self.workers) > 0:
+        if self.n_workers > 1:
             for _ in self.workers:
                 self.input_queue.put((seq, outputs))
             losses = torch.zeros((len(self.invariants)))

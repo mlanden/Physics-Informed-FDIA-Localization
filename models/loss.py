@@ -7,10 +7,8 @@ from invariants import Invariant
 from datasets import ICSDataset, SWATDataset
 
 
-def prediction_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_values: dict, hidden_states=None) -> Union[
+def prediction_loss(batch: torch.Tensor, outputs: torch.Tensor, target: torch.Tensor, categorical_values: dict) -> Union[
     Tuple[torch.Tensor, Tuple], torch.Tensor]:
-    hidden_states, outputs = evaluate_model(batch, hidden_states, model)
-
     losses = torch.zeros(batch.shape[-1])
     continuous_idx = 0
     classification_idx = 0
@@ -33,26 +31,17 @@ def prediction_loss(model, batch: torch.Tensor, target: torch.Tensor, categorica
             losses[i] = continuous_loss(predicted, target_value)
             continuous_idx += 1
 
-    return losses, hidden_states
+    return losses
 
 
-def evaluate_model(batch, hidden_states, model):
-    outputs, hidden_states = model.forward(batch, hidden_states)
-    return hidden_states, outputs
-
-
-def invariant_loss(model, batch: torch.Tensor, target: torch.Tensor, categorical_values: dict, hidden_states=None, invariants: List[Invariant]=None) -> Union[
+def invariant_loss(batch: torch.Tensor, outputs: torch.Tensor, target: torch.Tensor, categorical_values: dict,
+                   invariants: List[Invariant]=None) -> Union[
     Tuple[torch.Tensor, Tuple], torch.Tensor]:
-    hidden_states, outputs = evaluate_model(batch, hidden_states, model)
 
     loss = torch.zeros((len(invariants)))
     for i, invariant in enumerate(invariants):
         loss[i] = invariant.confidence(batch, outputs)
-    #     print("\r", end="")
-    #     print(f"{i} / {len(invariants)} invariants evaluated", end="")
-    # print()
-
-    return loss, hidden_states
+    return loss
 
 
 def get_losses(invariants):

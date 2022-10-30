@@ -33,6 +33,7 @@ class CategoricalPredicate(Predicate):
         A list of logit outputs for each categorical variable in the system
         """
         categorical_output = network_outputs[self.categorical_idx + 1]
+
         target = torch.full((categorical_output.shape[0],), self.class_value)
         return self.loss(categorical_output, target)
 

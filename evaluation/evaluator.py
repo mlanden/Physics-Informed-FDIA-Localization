@@ -16,8 +16,8 @@ class Evaluator(ABC):
         self.categorical_features = dataset.get_categorical_features()
         self.dataset = dataset
         self.conf = conf
-        self.checkpoint = conf["train"]["checkpoint"]
-        self.results_path = path.join("results", self.checkpoint)
+        self.checkpoint_dir = path.join("checkpoint", conf["train"]["checkpoint"])
+        self.results_path = path.join("results", conf["train"]["checkpoint"])
 
     @abstractmethod
     def alert(self, state, target):

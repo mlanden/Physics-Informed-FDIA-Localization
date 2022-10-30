@@ -17,7 +17,9 @@ def train():
     trainer = Trainer(callbacks=[ModelCheckpoint(dirpath=checkpoint_dir,
                                                  filename=checkpoint,
                                                  save_last=True)],
-                      max_epochs=2)
+                      max_epochs=conf["train"]["epochs"],
+                      devices=conf["train"]["n_workers"],
+                      accelerator="gpu" if torch.cuda.is_available() else "cpu")
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           sequence_len=conf["model"]["sequence_length"],
                           train=True,
@@ -42,12 +44,12 @@ def train():
 
 def find_normal_error():
     trainer = Trainer(default_root_dir=checkpoint_dir)
-    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load)
 
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           sequence_len=1,
                           train=True,
                           load_scaler=True)
+    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
     start = int((train_fraction + validate_fraction) * len(dataset))
     size = int(find_error_fraction * len(dataset))
     idx = list(range(start, start + size))
@@ -55,6 +57,23 @@ def find_normal_error():
     loader = DataLoader(normal)
 
     trainer.test(model, loader)
+
+
+def test():
+    dataset = SWATDataset(conf, conf["data"]["attack"],
+                          sequence_len=1,
+                          train=False,
+                          load_scaler=True)
+    type_ = conf["train"]["type"]
+    if type_ == "prediction":
+        model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
+        evaluator = NNEvaluator(conf, model, dataset)
+        evaluator.evaluate()
+    elif type_ == "invariants":
+        miner = InvariantMiner(conf, dataset)
+        miner.evaluate()
+    else:
+        raise RuntimeError("Unknown evaluation type")
 
 
 if __name__ == '__main__':
@@ -96,20 +115,7 @@ if __name__ == '__main__':
     elif task == "error":
         find_normal_error()
     elif task == "test":
-        dataset = SWATDataset(conf, conf["data"]["attack"],
-                              sequence_len=1,
-                              train=False,
-                              load_scaler=True)
-        type_ = conf["train"]["type"]
-        if type_ == "prediction":
-            evaluator = NNEvaluator(conf, dataset)
-            evaluator.evaluate()
-        elif type_ == "invariants":
-            miner = InvariantMiner(conf, dataset)
-            miner.evaluate()
-        else:
-            raise RuntimeError("Unknown evaluation type")
-
+        test()
     elif task == "predicates":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=conf["model"]["sequence_length"],
