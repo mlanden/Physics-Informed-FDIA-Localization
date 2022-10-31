@@ -11,7 +11,10 @@ import numpy as np
 import pickle
 from os import path
 import matplotlib
+from typing import List
+import queue
 
+import torch
 from .invariant import Invariant
 from datasets import ICSDataset
 from utils import cfp_growth, save_results
@@ -418,3 +421,65 @@ def create_apriori_sets(sets, k):
             if l1 == l2:
                 good_sets.append(sets[i] | sets[j])
     return good_sets
+
+
+def evaluate_invariants(states, outputs, invariants, n_workers):
+    states = torch.concat(states, 0).numpy()
+    combined_outputs = []
+    for i in range(len(outputs[0])):
+        outs = [outputs[idx][i] for idx in range(len(outputs))]
+        combined_outputs.append(torch.concat(outs, 0).numpy())
+
+    tasks, results = mp.JoinableQueue(), mp.JoinableQueue()
+    end_events = [mp.Event() for _ in range(n_workers)]
+    for i in range(len(invariants)):
+        tasks.put(i)
+    workers = [mp.Process(target=invariant_worker, args=(i, invariants, states, combined_outputs, tasks,
+                                                         results, end_events))
+               for i in range(n_workers)]
+    for worker in workers:
+        worker.start()
+
+    done = False
+    counter = 0
+    losses = torch.zeros((len(states), len(invariants)))
+    while results.qsize() > 0 or not done:
+        try:
+            invariant_id, loss = results.get(timeout=0.1)
+            losses[:, invariant_id] = torch.as_tensor(loss).view(1, -1)
+            counter += 1
+            results.task_done()
+            print(end="\r")
+            print(f"Completed {counter} / {len(invariants)} invariants", end="")
+
+            done = True
+            for e in end_events:
+                if not e.is_set():
+                    done = False
+        except queue.Empty:
+            pass
+    tasks.join()
+    results.join()
+    for worker in workers:
+        worker.join()
+    print("End eval invariants", flush=True)
+    return losses
+
+
+def invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tensor, outputs: List[torch.Tensor],
+                     tasks: mp.JoinableQueue, results: mp.JoinableQueue, end_events: List[mp.Event]):
+    states = torch.as_tensor(states)
+    for i in range(len(outputs)):
+        outputs[i] = torch.as_tensor(outputs[i])
+
+    while tasks.qsize() > 0:
+        try:
+            invariant_id = tasks.get(timeout=0.1)
+            invariant = invariants[invariant_id]
+            confidence = invariant.confidence(states, outputs)
+            results.put((invariant_id, confidence.numpy()))
+            tasks.task_done()
+        except queue.Empty:
+            pass
+    end_events[rank].set()
+    print(f"Rank {rank} ending", flush=True)

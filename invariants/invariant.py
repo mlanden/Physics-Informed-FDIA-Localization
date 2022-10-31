@@ -1,5 +1,5 @@
 import torch
-from typing import FrozenSet
+from typing import FrozenSet, List
 from .predicate import Predicate
 
 
@@ -22,7 +22,7 @@ class Invariant:
                 return False
         return True
 
-    def confidence(self, input_states: torch.Tensor, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         product = torch.ones((network_outputs[0].shape[0], 1))
         for predicate in self.antecedent_objs:
             product *= predicate.confidence(input_states, network_outputs)
@@ -30,7 +30,7 @@ class Invariant:
         for predicate in self.consequent_objs:
             product *= predicate.confidence(input_states, network_outputs)
 
-        return torch.mean(product)
+        return product
 
     def _convert_predicates(self):
         for p in self.antecedent:

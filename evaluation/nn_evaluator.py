@@ -1,15 +1,15 @@
-import pickle
-from os import path
-import torch
-from typing import List
-import queue
 import multiprocessing as mp
+import pickle
+import queue
+from os import path
+from typing import List
 
-from datasets import ICSDataset, SWATDataset
-from models import prediction_loss
-from .evaluator import Evaluator
-from models import get_losses
+import torch
+
+from datasets import ICSDataset
 from invariants import Invariant
+from models import get_losses
+from .evaluator import Evaluator
 
 
 class NNEvaluator(Evaluator):
@@ -43,7 +43,7 @@ class NNEvaluator(Evaluator):
                 self.invariants = pickle.load(fd)
 
             if self.n_workers > 1:
-                self.work_completed_events = [mp.Event() for _ in range(n_workers)]
+                self.work_completed_events = [mp.Event() for _ in range(self.n_workers)]
                 self.tasks = mp.JoinableQueue()
                 self.results = mp.JoinableQueue()
                 self.input_queue = mp.JoinableQueue()
@@ -52,9 +52,10 @@ class NNEvaluator(Evaluator):
                 self.start_work_event.clear()
                 self.end_workers_events.clear()
 
-                self.workers = [mp.Process(target=evaluate_invariants, args=(i, self.invariants, self.input_queue, self.tasks,
-                                                                             self.results, self.work_completed_events,
-                                                                             self.start_work_event, self.end_workers_events))
+                self.workers = [mp.Process(target=evaluate_invariants,
+                                           args=(i, self.invariants, self.input_queue, self.tasks, self.results,
+                                                 self.work_completed_events, self.start_work_event,
+                                                 self.end_workers_events))
                                 for i in range(self.n_workers)]
                 for worker in self.workers:
                     worker.start()
@@ -78,11 +79,7 @@ class NNEvaluator(Evaluator):
         state = state.unsqueeze(0)
         losses = self.compute_loss(state, target)
         losses = losses.detach()
-        print(losses.shape, self.normal_means.shape, self.normal_stds.shape)
         score = torch.abs(losses - self.normal_means) / self.normal_stds
-
-        # scores.append(score.item())
-        # print(loss, normal_means, normal_stds, attack)
         alarm = torch.any(score > 2)
         return alarm
 

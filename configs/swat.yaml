@@ -5,8 +5,8 @@ task: error
 #task: predicates
 #task: invariants
 data:
-  normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
-#  normal: ../Datasets/SWAT/First_Hour_2015.csv
+#  normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
+  normal: ../Datasets/SWAT/First_Hour_2015.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
   attack: ../Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
@@ -21,7 +21,7 @@ model:
   window_size: 20
 
 train:
-  n_workers: 1
+  n_workers: 2
   cuda: 0
   batch_size: 32
   epochs: 3

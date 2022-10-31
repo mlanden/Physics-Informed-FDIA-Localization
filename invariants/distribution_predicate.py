@@ -1,3 +1,4 @@
+from typing import List
 import numpy as np
 import torch
 
@@ -25,7 +26,7 @@ class DistributionPredicate(Predicate):
         cluster = self.model.predict(diffs)
         return np.hstack((False, np.logical_and(score >= self.threshold, cluster == self.distribution_idx)))
 
-    def confidence(self, input_states, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         continuous_outputs = network_outputs[0]
         if len(continuous_outputs.shape) == 1:
             continuous_outputs = continuous_outputs.view(1, -1)

@@ -1,5 +1,6 @@
 import torch
 import numpy as np
+from typing import List
 
 from .predicate import Predicate
 
@@ -28,7 +29,7 @@ class EventPredicate(Predicate):
             pred -= self.epsilon
             return states[:, self.target_idx] > pred
 
-    def confidence(self, input_states, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         continuous_output = network_outputs[0]
         coef_idx = 0
         target = 0

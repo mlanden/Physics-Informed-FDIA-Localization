@@ -38,10 +38,11 @@ def invariant_loss(batch: torch.Tensor, outputs: torch.Tensor, target: torch.Ten
                    invariants: List[Invariant]=None) -> Union[
     Tuple[torch.Tensor, Tuple], torch.Tensor]:
 
-    loss = torch.zeros((len(invariants)))
+    loss = torch.zeros((len(invariants), batch.shape[0]))
     for i, invariant in enumerate(invariants):
-        loss[i] = invariant.confidence(batch, outputs)
-    return loss
+        loss[i, :] = invariant.confidence(batch, outputs)
+
+    return torch.mean(loss, dim=1)
 
 
 def get_losses(invariants):

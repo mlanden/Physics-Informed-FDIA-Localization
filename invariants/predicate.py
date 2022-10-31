@@ -1,3 +1,4 @@
+from typing import List
 from abc import ABC, abstractmethod
 import torch
 import numpy as np
@@ -20,7 +21,7 @@ class Predicate(ABC):
         pass
 
     @abstractmethod
-    def confidence(self, input_states: torch.Tensor, network_outputs: torch.Tensor) -> torch.Tensor:
+    def confidence(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         """Returns the confidence that a state satisfies the predicate 
         
         Parameters
