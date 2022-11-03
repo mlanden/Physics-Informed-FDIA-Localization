@@ -1,9 +1,8 @@
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import joblib
 from typing import Tuple, Union
-from os import path
 
 from utils import activations
 
@@ -13,8 +12,6 @@ class PredictionModel(nn.Module):
     def __init__(self, conf, categorical_values):
         super().__init__()
         self.checkpoint = conf["train"]["checkpoint"]
-        self.scalar_path = path.join("checkpoint", self.checkpoint, "scaler.gz")
-        self.scalar = None
         self.categorical_values = categorical_values
 
         hidden_layers = conf["model"]["hidden_layers"]
@@ -23,10 +20,11 @@ class PredictionModel(nn.Module):
 
         self.activation = activations[conf["model"]["activation"]]
         if self.embedding_size > 0:
-            input_len = self.n_features + len(self.categorical_values) * (self.embedding_size - 1)
+            self.input_len = self.n_features + len(self.categorical_values) * (self.embedding_size - 1)
         else:
-            input_len = self.n_features + sum(self.categorical_values.values()) - len(self.categorical_values)
-            self.input_linear = nn.Linear(input_len, hidden_layers[0])
+            self.input_len = self.n_features + sum(self.categorical_values.values()) - len(self.categorical_values)
+
+        self.input_linear = nn.Linear(self.input_len, hidden_layers[0])
         self.embeddings = nn.ModuleList()
         self.classifications = nn.ModuleList()
         for size in self.categorical_values.values():
@@ -40,8 +38,8 @@ class PredictionModel(nn.Module):
 
         self.output_linear = nn.Linear(hidden_layers[-1], self.n_features - len(self.categorical_values))
 
-    def forward(self, x, hidden_states=None):
-        x = self.embed(x)
+    def forward(self, unscaled_seq, scaled_seq, hidden_states=None):
+        x = self.embed(unscaled_seq, scaled_seq)
         x = self.input_linear(x)
         x = self.activation(x)
         for i, rnn in enumerate(self.rnns):
@@ -59,12 +57,6 @@ class PredictionModel(nn.Module):
             outputs.append(out)
 
         return outputs, hidden_states
-
-    def scale(self, target):
-        if self.scalar is None:
-            self.scalar = joblib.load(self.scalar_path)
-        scaled_target = torch.tensor(self.scalar.transform(target), dtype=torch.float)
-        return scaled_target
 
     def predict(self, batch: torch.Tensor, hidden_states: torch.Tensor = None) -> Union[
         Tuple[torch.Tensor, Tuple], torch.Tensor]:
@@ -91,32 +83,28 @@ class PredictionModel(nn.Module):
         else:
             return output
 
-    def embed(self, batch: torch.Tensor) -> torch.Tensor:
-        if self.scalar is None:
-            self.scalar = joblib.load(self.scalar_path)
-
-        new_batch = torch.zeros((batch.shape[0], batch.shape[1], self.input_linear.in_features))
-        for i in range(len(batch)):
-            scaled = self.scalar.transform(batch[i, ...])
-            for j in range(batch.shape[1]):
+    def embed(self, unscaled_seq: torch.Tensor, scaled_seq: torch.Tensor) -> torch.Tensor:
+        new_batch = torch.zeros((scaled_seq.shape[0], scaled_seq.shape[1], self.input_len), device=scaled_seq.device)
+        for i in range(scaled_seq.shape[0]):
+            for j in range(scaled_seq.shape[1]):
                 new_idx = 0
                 embed_idx = 0
-                for k in range(batch.shape[2]):
-                    if k in self.categorical_values:
-                        in_ = batch[i, j, k].detach().long()
-                        if self.categorical_values[k] == 2:
+                for feature in range(scaled_seq.shape[-1]):
+                    if feature in self.categorical_values:
+                        in_ = unscaled_seq[i, j, feature]
+                        # swat specific
+                        if self.categorical_values[feature] == 2:
                             in_ -= 1
+
                         if self.embedding_size > 0:
-                            new_data = self.embeddings[embed_idx](in_)
-                            size = self.embedding_size
+                            embedding = self.embeddings[embed_idx](in_.int())
                         else:
-                            new_data = F.one_hot(in_, num_classes=self.categorical_values[k])
-                            size = self.categorical_values[k]
-                        new_batch[i, j, new_idx: new_idx + size] = new_data
+                            embedding = F.one_hot(in_, num_classes=self.categorical_values[feature])
+                        new_batch[i, j, new_idx: new_idx + embedding.shape[-1]] = embedding
                         embed_idx += 1
-                        new_idx += size
+                        new_idx += embedding.shape[-1]
                     else:
-                        new_batch[i, j, new_idx] = scaled[j, k]
+                        new_batch[i, j, new_idx] = scaled_seq[i, j, feature]
                         new_idx += 1
         return new_batch
 
@@ -136,5 +124,3 @@ class PredictionModel(nn.Module):
                 output[:, continuous_idx] = scaled[:, i]
                 continuous_idx += 1
         return output
-
-

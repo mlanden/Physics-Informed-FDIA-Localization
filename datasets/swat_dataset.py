@@ -26,15 +26,16 @@ class SWATDataset(ICSDataset):
         self.train = train
         scale_file = path.join("checkpoint", self.checkpoint, "scaler.gz")
 
-        self.features = self.data.iloc[:, 1: -1].to_numpy()
+        self.features = self.data.iloc[:, 1: -1].to_numpy().astype(np.float32)
         self.labels = self.data.iloc[:, -1] == "Attack"
 
-        if load_scaler:
+        if load_scaler and path.exists(scale_file):
             self.scaler = joblib.load(scale_file)
         else:
             self.scaler = StandardScaler()
             self.scaler.fit(self.features)
             joblib.dump(self.scaler, scale_file)
+        self.scaled_features = self.scaler.transform(self.features)
 
         if self.train:
             self.sequences, self.targets = None, None
@@ -45,14 +46,14 @@ class SWATDataset(ICSDataset):
         self.targets = []
         i = 0
         while i < len(self.features) - self.sequence_len:
-            seq = self.features[i: i + self.sequence_len, :]
-            target = self.features[i + self.sequence_len, :]
+            seq = (i, i + self.sequence_len)
+            target = i + self.sequence_len
             self.sequences.append(seq)
             self.targets.append(target)
             i += self.window_size
 
-        self.sequences = np.array(self.sequences, dtype=np.float32)
-        self.targets = np.array(self.targets, dtype=np.float32)
+        # self.sequences = np.array(self.sequences, dtype=np.float32)
+        # self.targets = np.array(self.targets, dtype=np.float32)
 
     def __len__(self):
         if self.train:
@@ -62,7 +63,10 @@ class SWATDataset(ICSDataset):
 
     def __getitem__(self, item):
         if self.train:
-            return self.sequences[item], self.targets[item]
+            seq_bounds = self.sequences[item]
+            unscaled_seq = self.features[seq_bounds[0]: seq_bounds[1]]
+            scaled_seq = self.scaled_features[seq_bounds[0]: seq_bounds[1]]
+            return unscaled_seq, scaled_seq, self.features[self.targets[item]]
         else:
             return (np.array(self.features[item, :], dtype=np.float32),
                     np.array(self.features[item + 1, :], dtype=np.float32),

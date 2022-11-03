@@ -19,6 +19,7 @@ def prediction_loss(batch: torch.Tensor, outputs: torch.Tensor, target: torch.Te
             # Cross entropy_loss
             logits = outputs[classification_idx + 1]
             target_class = target[:, i].long()
+            # swat specific
             if categorical_values[i] == 2:
                 target_class[:] -= 1
 
@@ -40,7 +41,10 @@ def invariant_loss(batch: torch.Tensor, outputs: torch.Tensor, target: torch.Ten
 
     loss = torch.zeros((len(invariants), batch.shape[0]))
     for i, invariant in enumerate(invariants):
-        loss[i, :] = invariant.confidence(batch, outputs)
+        confidence = invariant.confidence(batch, outputs)
+        if len(confidence.shape) > 1:
+            confidence = confidence.squeeze(1)
+        loss[i, :] = confidence
 
     return torch.mean(loss, dim=1)
 

@@ -30,7 +30,7 @@ class DistributionPredicate(Predicate):
         continuous_outputs = network_outputs[0]
         if len(continuous_outputs.shape) == 1:
             continuous_outputs = continuous_outputs.view(1, -1)
-        total = torch.zeros(continuous_outputs.shape[0])
+        total = torch.zeros(continuous_outputs.shape[0], device=input_states.device)
         for i in range(len(self.distributions)):
             log_prob = self.distributions[i].log_prob(continuous_outputs[:, self.continuous_idx])
             total += self.weights[i] * log_prob

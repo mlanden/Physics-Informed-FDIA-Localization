@@ -35,7 +35,8 @@ class CategoricalPredicate(Predicate):
         """
         categorical_output = network_outputs[self.categorical_idx + 1]
 
-        target = torch.full((categorical_output.shape[0],), self.class_value)
+        target = torch.full((categorical_output.shape[0],), self.class_value, device=categorical_output.device)
+
         return self.loss(categorical_output, target)
 
     def __hash__(self):

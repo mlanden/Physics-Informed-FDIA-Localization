@@ -5,7 +5,6 @@ from functools import partial
 import os
 import optuna
 from torch import distributed as dist
-from .trainer import Trainer
 import torch.multiprocessing as mp
 
 

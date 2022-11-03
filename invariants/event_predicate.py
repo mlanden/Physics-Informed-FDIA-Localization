@@ -33,7 +33,7 @@ class EventPredicate(Predicate):
         continuous_output = network_outputs[0]
         coef_idx = 0
         target = 0
-        total = torch.full((continuous_output.shape[0], 1), self.model.intercept_)
+        total = torch.full((continuous_output.shape[0], 1), self.model.intercept_, device=input_states.device)
         i = 0
         while i < len(self.continuous_features):
             if self.continuous_features[i] != self.target_idx and self.model.coef_[coef_idx] != 0:

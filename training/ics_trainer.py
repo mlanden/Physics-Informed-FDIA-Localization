@@ -93,12 +93,13 @@ class ICSTrainer(LightningModule):
 
         torch.save(obj, self.normal_behavior_path)
 
-    def compute_loss(self, seq, target):
-        self.recent_outputs, self.hidden_states = self.model(seq, self.hidden_states)
+    def compute_loss(self, unscaled_seq, scaled_seq, target):
+
+        self.recent_outputs, self.hidden_states = self.model(unscaled_seq, scaled_seq, self.hidden_states)
 
         loss = []
         for loss_fn in self.loss_fns:
-            losses = loss_fn(seq, self.recent_outputs, target, self.categorical_values)
+            losses = loss_fn(unscaled_seq, self.recent_outputs, target, self.categorical_values)
             loss.append(losses.view(1, -1))
         return torch.concat(loss, dim=1)
 

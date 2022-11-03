@@ -4,7 +4,7 @@ import yaml
 import sys
 import torch
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint
+from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from torch.utils.data import Subset, DataLoader
 
 from datasets import SWATDataset
@@ -14,12 +14,19 @@ from invariants import generate_predicates, InvariantMiner
 
 
 def train():
-    trainer = Trainer(callbacks=[ModelCheckpoint(dirpath=checkpoint_dir,
-                                                 filename=checkpoint,
-                                                 save_last=True)],
+    
+    trainer = Trainer(default_root_dir=checkpoint_dir,
+                      log_every_n_steps=9,
                       max_epochs=conf["train"]["epochs"],
                       devices=conf["train"]["n_workers"],
-                      accelerator="gpu" if torch.cuda.is_available() else "cpu")
+                      accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                      callbacks=[ModelCheckpoint(dirpath=checkpoint_dir,
+                                                 filename=checkpoint,
+                                                 save_last=True,
+                                                 every_n_train_steps=0,
+                                                 every_n_epochs=1,
+                                                 save_on_train_epoch_end=True),
+                                 RichProgressBar(leave=True)])
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           sequence_len=conf["model"]["sequence_length"],
                           train=True,
@@ -43,13 +50,14 @@ def train():
 
 
 def find_normal_error():
+    device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
     trainer = Trainer(default_root_dir=checkpoint_dir)
 
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           sequence_len=1,
                           train=True,
                           load_scaler=True)
-    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
+    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf, map_location=device)
     start = int((train_fraction + validate_fraction) * len(dataset))
     size = int(find_error_fraction * len(dataset))
     idx = list(range(start, start + size))
@@ -88,7 +96,7 @@ if __name__ == '__main__':
     # checkpoint_to_load = "/home/mlanden/ICS-Attack-Detection/checkpoint/swat_2015_full/swat_2015_full-v1.ckpt"
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, "last.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, "last-v4.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)

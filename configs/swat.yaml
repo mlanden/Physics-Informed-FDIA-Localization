@@ -5,30 +5,30 @@ task: error
 #task: predicates
 #task: invariants
 data:
-#  normal: ../Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
-  normal: ../Datasets/SWAT/First_Hour_2015.csv
+  normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
+#  normal: ../data/SWAT/First_Hour_2015.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
-  attack: ../Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
+  attack: ../data/SWAT/SWaT_Dataset_Attack_v0.csv
 #  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
   n_features: 51
 
 model:
   hidden_layers: [100, 100]
   activation: leakyRelu
-  embedding_size: 0
-  sequence_length: 5
-  window_size: 20
+  embedding_size: 10
+  sequence_length: 10
+  window_size: 8
 
 train:
-  n_workers: 2
+  n_workers: 1
   cuda: 0
-  batch_size: 32
-  epochs: 3
+  batch_size: 64
+  epochs: 100
   lr: 0.0005
   regularization: 0.00001
   checkpoint: swat_2015_full
-  load_checkpoint: 0
+  load_checkpoint: 1
 
   tensorboard: 1
   train_fraction: 0.01
