@@ -3,7 +3,8 @@ import pickle
 import queue
 from os import path
 from typing import List
-
+import json
+import joblib
 import torch
 
 from datasets import ICSDataset
@@ -18,17 +19,24 @@ class NNEvaluator(Evaluator):
         print(f"Number of samples: {len(dataset)}")
 
         self.model_path = path.join(self.checkpoint_dir, "model.pt")
-        self.normal_behavior_path = path.join(self.checkpoint_dir, "normal_behavior.pt")
+        self.normal_behavior_path = path.join(self.checkpoint_dir, "normal_behavior.json")
+        self.normal_model_path = path.join(self.checkpoint_dir, "normal_model.gz")
+        # self.normal_behavior_path = path.join(self.checkpoint_dir, "normal_behavior.pt")
+        self.losses_path = path.join(self.checkpoint_dir, "evaluation_losses.json")
         self.invariants_path = path.join("checkpoint", conf["train"]["invariants"] + "_invariants.pkl")
         self.n_workers = conf["train"]['n_workers']
 
         self.model = model
         self.model.eval()
-        obj = torch.load(self.normal_behavior_path)
-        self.normal_means = obj["mean"]
-        self.normal_stds = obj["std"]
+        self.normal_model = joblib.load(self.normal_model_path)
+        with open(self.normal_behavior_path, "r") as fd:
+            self.min_score = json.load(fd)[0]
+        # obj = torch.load(self.normal_behavior_path)
+        # self.normal_means = obj["mean"]
+        # self.normal_stds = obj["std"]
 
         self.loss = conf["train"]["loss"]
+        self.saved_losses = []
         self.invariants = None
         self.workers = None
         self.tasks = None
@@ -75,27 +83,38 @@ class NNEvaluator(Evaluator):
             for worker in self.workers:
                 worker.join()
 
-    def alert(self, state, target):
-        state = state.unsqueeze(0)
-        losses = self.compute_loss(state, target)
+    def alert(self, state, target, attack):
+        unscaled_state, scaled_state = state
+        unscaled_state = unscaled_state.unsqueeze(0)
+        scaled_state = scaled_state.unsqueeze(0)
+        losses = self.compute_loss(unscaled_state, scaled_state, target)
         losses = losses.detach()
-        score = torch.abs(losses - self.normal_means) / self.normal_stds
-        alarm = torch.any(score > 2)
+
+        # score = torch.abs(losses - self.normal_means) / self.normal_stds
+        # alarm = torch.any(score > 2)
+        score = self.normal_model.score_samples(losses.numpy())
+        self.saved_losses.append((score[0], attack.float().item()))
+        # print(" ", attack, score, self.min_score)
+        alarm = score < self.min_score
         return alarm
 
-    def compute_loss(self, seq, target):
+    def on_evaluate_end(self):
+        with open(self.losses_path, "w") as fd:
+            json.dump(self.saved_losses, fd)
+
+    def compute_loss(self, unscaled_state, scaled_state, target):
         with torch.no_grad():
-            outputs, self.hidden_states = self.model(seq, self.hidden_states)
+            outputs, self.hidden_states = self.model((unscaled_state, scaled_state), self.hidden_states)
 
         loss = []
         for loss_fn in self.loss_fns:
-            losses = loss_fn(seq, outputs, target, self.dataset.get_categorical_features())
+            losses = loss_fn(unscaled_state, outputs, target, self.dataset.get_categorical_features())
             loss.append(losses.view(1, -1))
 
         # Invariants
-        if self.n_workers > 1:
+        if self.workers is not None:
             for _ in self.workers:
-                self.input_queue.put((seq, outputs))
+                self.input_queue.put((unscaled_state, scaled_state, outputs))
             losses = torch.zeros((len(self.invariants)))
 
             for i in range(len(self.invariants)):

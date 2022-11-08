@@ -1,10 +1,6 @@
 import json
 from os import path
-from typing import List
-import queue
-
-import torch
-from torch import multiprocessing as mp
+import numpy as np
 
 
 def save_results(tp, tn, fp, fn, labels, results_path, scores=None, delays=None):
@@ -30,6 +26,7 @@ def save_results(tp, tn, fp, fn, labels, results_path, scores=None, delays=None)
 
     if delays is not None:
         results["delay"] = delays
+        print(f"Delay: {np.mean(delays)}")
 
     with open(path.join(results_path, "detection.json"), "w") as fd:
         json.dump(results, fd)

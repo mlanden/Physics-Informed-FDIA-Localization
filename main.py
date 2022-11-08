@@ -16,7 +16,6 @@ from invariants import generate_predicates, InvariantMiner
 def train():
     
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      log_every_n_steps=9,
                       max_epochs=conf["train"]["epochs"],
                       devices=conf["train"]["n_workers"],
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
@@ -50,18 +49,21 @@ def train():
 
 
 def find_normal_error():
-    device = torch.device("cuda:0") if torch.cuda.is_available() else torch.device("cpu")
-    trainer = Trainer(default_root_dir=checkpoint_dir)
+    # device =  torch.device("gpu")
+    trainer = Trainer(default_root_dir=checkpoint_dir,
+                      # accelerator="gpu" if torch.cuda.is_available() else "cpu"
+                      )
 
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           sequence_len=1,
                           train=True,
                           load_scaler=True)
-    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf, map_location=device)
+    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)#, map_location=device)
     start = int((train_fraction + validate_fraction) * len(dataset))
     size = int(find_error_fraction * len(dataset))
     idx = list(range(start, start + size))
     normal = Subset(dataset, idx)
+    print(f"States to test:", len(normal))
     loader = DataLoader(normal)
 
     trainer.test(model, loader)
@@ -96,7 +98,7 @@ if __name__ == '__main__':
     # checkpoint_to_load = "/home/mlanden/ICS-Attack-Detection/checkpoint/swat_2015_full/swat_2015_full-v1.ckpt"
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, "last-v4.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, "last.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)

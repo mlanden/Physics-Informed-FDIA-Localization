@@ -40,6 +40,7 @@ class SWATDataset(ICSDataset):
         if self.train:
             self.sequences, self.targets = None, None
             self.make_sequences()
+            print(f"Created {len(self.sequences)} sequences")
 
     def make_sequences(self):
         self.sequences = []
@@ -68,7 +69,8 @@ class SWATDataset(ICSDataset):
             scaled_seq = self.scaled_features[seq_bounds[0]: seq_bounds[1]]
             return unscaled_seq, scaled_seq, self.features[self.targets[item]]
         else:
-            return (np.array(self.features[item, :], dtype=np.float32),
+            return ((np.array(self.features[item, :], dtype=np.float32),
+                    np.array(self.scaled_features[item, :], dtype=np.float32)),
                     np.array(self.features[item + 1, :], dtype=np.float32),
                     self.labels.to_numpy()[item])
 

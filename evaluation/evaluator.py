@@ -20,7 +20,7 @@ class Evaluator(ABC):
         self.results_path = path.join("results", conf["train"]["checkpoint"])
 
     @abstractmethod
-    def alert(self, state, target):
+    def alert(self, state, target, attack):
         pass
 
     def close(self):
@@ -58,7 +58,7 @@ class Evaluator(ABC):
                 attack_start = step
 
             start = time.time()
-            alert = self.alert(features, target)
+            alert = self.alert(features, target, attack)
             # print(f"Alerting took {time.time() - start} seconds")
             if attack:
                 if alert:
@@ -76,11 +76,14 @@ class Evaluator(ABC):
             if len(delays) > 0:
                 msg += f", Dwell: {np.mean(delays):.3f}"
             print(f"\r", msg, end="")
-            # print(msg)
-            if step == 1000:
-                break
+            # if step == 10000:
+            #     break
+
         print()
+        self.on_evaluate_end()
         self.close()
 
         save_results(tp, tn, fp, fn, labels, self.results_path, scores, delays)
 
+    def on_evaluate_end(self):
+        pass

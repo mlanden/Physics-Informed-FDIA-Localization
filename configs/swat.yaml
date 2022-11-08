@@ -1,6 +1,6 @@
-#task: train
+task: train
 #task: "hyperparameter_optimize"
-task: error
+#task: error
 #task: test
 #task: predicates
 #task: invariants
@@ -21,21 +21,21 @@ model:
   window_size: 8
 
 train:
-  n_workers: 1
+  n_workers: 4
   cuda: 0
   batch_size: 64
   epochs: 100
-  lr: 0.0005
+  lr: 0.001
   regularization: 0.00001
-  checkpoint: swat_2015_full
-  load_checkpoint: 1
+  checkpoint: swat_2015_full_nn
+  load_checkpoint: 0
 
   tensorboard: 1
-  train_fraction: 0.01
+  train_fraction: 0.2
   validate_fraction: 0.01
   find_error_fraction: 0.5
   validation_frequency: 1
-  loss: invariant
+  loss: noinvariant
   max_gmm_components: 5
   distribution_threshold: 1.2
   event_predicate_error: 0.0001

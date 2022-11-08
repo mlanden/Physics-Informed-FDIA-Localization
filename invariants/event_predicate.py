@@ -14,6 +14,10 @@ class EventPredicate(Predicate):
         self.target_idx = target_idx
         self.epsilon = epsilon
         self.model = model
+        self.linear_model = torch.nn.Linear(len(self.model.coef_), 1)
+        with torch.no_grad():
+            self.linear_model.weight = torch.nn.Parameter(torch.as_tensor(self.model.coef_).view(1, -1), requires_grad=False)
+            self.linear_model.bias = torch.nn.Parameter(torch.as_tensor(self.model.intercept_), requires_grad=False)
 
         self.features = list(continuous_features)
         self.features.remove(target_idx)
@@ -30,23 +34,22 @@ class EventPredicate(Predicate):
             return states[:, self.target_idx] > pred
 
     def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
+        self.linear_model.to(input_states.device)
+
         continuous_output = network_outputs[0]
-        coef_idx = 0
+        input_ = torch.zeros((input_states.shape[0], self.linear_model.in_features), device=input_states.device)
+        input_idx = 0
         target = 0
-        total = torch.full((continuous_output.shape[0], 1), self.model.intercept_, device=input_states.device)
-        i = 0
-        while i < len(self.continuous_features):
-            if self.continuous_features[i] != self.target_idx and self.model.coef_[coef_idx] != 0:
-                term = self.model.coef_[coef_idx] * (input_states[:, -1, i] + continuous_output[:, i])
-                term = term.view(-1, 1)
-                total += term
-                coef_idx += 1
-            elif self.continuous_features[i] != self.target_idx and self.model.coef_[coef_idx] == 0:
-                coef_idx += 1
+        for i, feature_idx in enumerate(self.continuous_features):
+            state_prediction = input_states[:, -1, feature_idx] + continuous_output[:, i]
+            if feature_idx != self.target_idx:
+                input_[:, input_idx] = state_prediction
+                input_idx += 1
             else:
-                target = continuous_output[:, i].view(-1, 1)
-            i += 1
-        confidence = torch.abs(target - total)
+                target = state_prediction.view(-1, 1)
+
+        predicted = self.linear_model(input_)
+        confidence = torch.abs(target - predicted)
         return confidence
 
     def __hash__(self):

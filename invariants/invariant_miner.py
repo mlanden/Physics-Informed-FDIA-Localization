@@ -475,8 +475,10 @@ def invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tenso
     while tasks.qsize() > 0:
         try:
             invariant_id = tasks.get(timeout=0.1)
+            print(f"Rank {rank}, task {invariant_id}", flush=True)
             invariant = invariants[invariant_id]
             confidence = invariant.confidence(states, outputs)
+            print(confidence, flush=True)
             results.put((invariant_id, confidence.numpy()))
             tasks.task_done()
         except queue.Empty:
