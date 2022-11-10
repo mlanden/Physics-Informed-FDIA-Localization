@@ -1,7 +1,7 @@
-task: train
-#task: "hyperparameter_optimize"
-#task: error
+#task: train
+task: error
 #task: test
+#task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 data:
@@ -27,7 +27,7 @@ train:
   epochs: 100
   lr: 0.001
   regularization: 0.00001
-  checkpoint: swat_2015_full_nn
+  checkpoint: swat_2015_full_lr_decay
   load_checkpoint: 0
 
   tensorboard: 1
@@ -35,7 +35,7 @@ train:
   validate_fraction: 0.01
   find_error_fraction: 0.5
   validation_frequency: 1
-  loss: noinvariant
+  loss: invariant
   max_gmm_components: 5
   distribution_threshold: 1.2
   event_predicate_error: 0.0001

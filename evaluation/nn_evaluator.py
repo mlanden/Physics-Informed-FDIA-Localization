@@ -9,7 +9,7 @@ import torch
 
 from datasets import ICSDataset
 from invariants import Invariant
-from models import get_losses
+from models import prediction_loss, invariant_loss
 from .evaluator import Evaluator
 
 
@@ -17,25 +17,27 @@ class NNEvaluator(Evaluator):
     def __init__(self, conf: dict, model: torch.nn.Module,  dataset: ICSDataset):
         super(NNEvaluator, self).__init__(conf, dataset)
         print(f"Number of samples: {len(dataset)}")
+        self.gmm = True
 
-        self.model_path = path.join(self.checkpoint_dir, "model.pt")
-        self.normal_behavior_path = path.join(self.checkpoint_dir, "normal_behavior.json")
         self.normal_model_path = path.join(self.checkpoint_dir, "normal_model.gz")
-        # self.normal_behavior_path = path.join(self.checkpoint_dir, "normal_behavior.pt")
         self.losses_path = path.join(self.checkpoint_dir, "evaluation_losses.json")
         self.invariants_path = path.join("checkpoint", conf["train"]["invariants"] + "_invariants.pkl")
         self.n_workers = conf["train"]['n_workers']
+        self.model_path = path.join(self.checkpoint_dir, "model.pt")
+        self.loss = conf["train"]["loss"]
+        self.normal_behavior_path = path.join(self.checkpoint_dir, "normal_behavior.json")
+        if self.gmm:
+            self.normal_model = joblib.load(self.normal_model_path)
+            with open(self.normal_behavior_path, "r") as fd:
+                self.min_score = json.load(fd)[0]
+        else:
+            with open(self.normal_behavior_path, "r") as fd:
+                obj = json.load(fd)
+            self.normal_means = torch.as_tensor(obj["mean"])
+            self.normal_stds = torch.as_tensor(obj["std"])
 
         self.model = model
         self.model.eval()
-        self.normal_model = joblib.load(self.normal_model_path)
-        with open(self.normal_behavior_path, "r") as fd:
-            self.min_score = json.load(fd)[0]
-        # obj = torch.load(self.normal_behavior_path)
-        # self.normal_means = obj["mean"]
-        # self.normal_stds = obj["std"]
-
-        self.loss = conf["train"]["loss"]
         self.saved_losses = []
         self.invariants = None
         self.workers = None
@@ -68,10 +70,9 @@ class NNEvaluator(Evaluator):
                 for worker in self.workers:
                     worker.start()
         self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
-        if self.n_workers > 1:
-            self.loss_fns = get_losses(None)
-        else:
-            self.loss_fns = get_losses(self.invariants)
+        self.loss_fns = [prediction_loss]
+        if self.invariants is not None and self.n_workers > 0:
+            self.loss_fns.append(invariant_loss)
 
     def close(self):
         if self.workers is not None:
@@ -90,12 +91,17 @@ class NNEvaluator(Evaluator):
         losses = self.compute_loss(unscaled_state, scaled_state, target)
         losses = losses.detach()
 
-        # score = torch.abs(losses - self.normal_means) / self.normal_stds
-        # alarm = torch.any(score > 2)
-        score = self.normal_model.score_samples(losses.numpy())
-        self.saved_losses.append((score[0], attack.float().item()))
+        if self.gmm:
+            score = self.normal_model.score_samples(losses.numpy())
+            alarm = score < 0.5 * self.min_score
+            if attack and not alarm:
+                print(score / self.min_score)
+            self.saved_losses.append((score[0], attack.float().item()))
+        else:
+            score = torch.abs(losses - self.normal_means) / self.normal_stds
+            alarm = torch.any(score > 2)
+
         # print(" ", attack, score, self.min_score)
-        alarm = score < self.min_score
         return alarm
 
     def on_evaluate_end(self):
@@ -114,7 +120,7 @@ class NNEvaluator(Evaluator):
         # Invariants
         if self.workers is not None:
             for _ in self.workers:
-                self.input_queue.put((unscaled_state, scaled_state, outputs))
+                self.input_queue.put((unscaled_state, outputs))
             losses = torch.zeros((len(self.invariants)))
 
             for i in range(len(self.invariants)):
@@ -152,12 +158,12 @@ def evaluate_invariants(rank: int, invariants: List[Invariant], inputs: mp.Joina
     while not end_work_event.is_set():
         start_work_event.wait()
         try:
-            batch, outputs = inputs.get(timeout=0.1)
+            unscaled_states, outputs = inputs.get(timeout=0.1)
             while tasks.qsize() > 0:
                 try:
                     i = tasks.get(timeout=0.1)
                     invariant = invariants[i]
-                    loss = invariant.confidence(batch, outputs)
+                    loss = invariant.confidence(unscaled_states, outputs)
                     results.put((i, loss.item()))
                     tasks.task_done()
                 except queue.Empty:

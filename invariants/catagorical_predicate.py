@@ -1,7 +1,7 @@
 from typing import List
 import numpy as np
 import torch
-
+import torch.nn.functional as F
 from .predicate import Predicate
 
 
@@ -13,7 +13,7 @@ class CategoricalPredicate(Predicate):
         self.idx = idx
         self.class_value = class_value
 
-        self.loss = torch.nn.CrossEntropyLoss()
+        self.loss = torch.nn.CrossEntropyLoss(reduction="none")
 
     def is_satisfied(self, states: np.ndarray) -> bool:
         """ Determine whether a state of the system has a categorical variable set to the target class
@@ -35,9 +35,9 @@ class CategoricalPredicate(Predicate):
         """
         categorical_output = network_outputs[self.categorical_idx + 1]
 
-        target = torch.full((categorical_output.shape[0],), self.class_value, device=categorical_output.device)
-
-        return self.loss(categorical_output, target)
+        target = torch.full((categorical_output.shape[0], ), self.class_value, device=categorical_output.device)
+        loss = F.cross_entropy(categorical_output, target, reduction="none")
+        return loss.view(1, -1)
 
     def __hash__(self):
         if self.hash is None:

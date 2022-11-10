@@ -2,10 +2,9 @@ import os
 import sys
 
 import time
-import queue
 from typing import List, Tuple
 from collections import defaultdict
-import multiprocessing as mp
+import torch.multiprocessing as mp
 
 import numpy as np
 import pickle
@@ -423,65 +422,66 @@ def create_apriori_sets(sets, k):
     return good_sets
 
 
-def evaluate_invariants(states, outputs, invariants, n_workers):
-    states = torch.concat(states, 0).numpy()
+def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outputs: List[List[torch.Tensor]],
+                        n_workers) -> torch.Tensor:
+    if n_workers <= 0:
+        raise RuntimeError("Cannot use multiprocessing for 1 worker")
     combined_outputs = []
     for i in range(len(outputs[0])):
-        outs = [outputs[idx][i] for idx in range(len(outputs))]
-        combined_outputs.append(torch.concat(outs, 0).numpy())
+        outs = [outputs[place][i].cpu().detach() for place in range(len(outputs))]
+        torch_output = torch.cat(outs, dim=0)
+        combined_outputs.append(torch_output)
 
-    tasks, results = mp.JoinableQueue(), mp.JoinableQueue()
-    end_events = [mp.Event() for _ in range(n_workers)]
+    tasks = mp.JoinableQueue()
+    results = mp.JoinableQueue()
+    work_completed_events = [mp.Event() for _ in range(n_workers)]
     for i in range(len(invariants)):
         tasks.put(i)
-    workers = [mp.Process(target=invariant_worker, args=(i, invariants, states, combined_outputs, tasks,
-                                                         results, end_events))
-               for i in range(n_workers)]
+    mp.set_start_method("spawn", force=True)
+    mp.set_sharing_strategy("file_system")
+    workers = [mp.Process(target=_invariant_worker, args=(i, invariants, states, combined_outputs, tasks, results,
+                                                          work_completed_events)) for i in range(n_workers)]
     for worker in workers:
         worker.start()
+    print(f"Number of tasks: {tasks.qsize()}")
 
     done = False
-    counter = 0
-    losses = torch.zeros((len(states), len(invariants)))
-    while results.qsize() > 0 or not done:
+    count = 0
+    losses = torch.zeros((len(invariants), states.shape[0]))
+    while not done or results.qsize() > 0:
         try:
-            invariant_id, loss = results.get(timeout=0.1)
-            losses[:, invariant_id] = torch.as_tensor(loss).view(1, -1)
-            counter += 1
+            id_, confidence = results.get(timeout=0.1)
+            losses[id_, :] = confidence
             results.task_done()
-            print(end="\r")
-            print(f"Completed {counter} / {len(invariants)} invariants", end="")
+            count += 1
+            print("\r", end="", flush=True)
+            print(f"{count} / {len(invariants)} invariants completed", end="", flush=True)
 
             done = True
-            for e in end_events:
+            for e in work_completed_events:
                 if not e.is_set():
                     done = False
+                    break
         except queue.Empty:
             pass
     tasks.join()
     results.join()
     for worker in workers:
         worker.join()
-    print("End eval invariants", flush=True)
+    losses = torch.t(losses)
+    print("Invariants evaluated")
     return losses
 
 
-def invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tensor, outputs: List[torch.Tensor],
-                     tasks: mp.JoinableQueue, results: mp.JoinableQueue, end_events: List[mp.Event]):
-    states = torch.as_tensor(states)
-    for i in range(len(outputs)):
-        outputs[i] = torch.as_tensor(outputs[i])
-
+def _invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tensor, outputs: List[torch.Tensor],
+                      tasks: mp.JoinableQueue, results: mp.JoinableQueue, worker_end_events: List[mp.Event]):
     while tasks.qsize() > 0:
         try:
-            invariant_id = tasks.get(timeout=0.1)
-            print(f"Rank {rank}, task {invariant_id}", flush=True)
-            invariant = invariants[invariant_id]
+            inv_id = tasks.get(timeout=0.1)
+            invariant = invariants[inv_id]
             confidence = invariant.confidence(states, outputs)
-            print(confidence, flush=True)
-            results.put((invariant_id, confidence.numpy()))
+            results.put((inv_id, confidence))
             tasks.task_done()
         except queue.Empty:
             pass
-    end_events[rank].set()
-    print(f"Rank {rank} ending", flush=True)
+    worker_end_events[rank].set()

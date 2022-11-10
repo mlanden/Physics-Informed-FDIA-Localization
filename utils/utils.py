@@ -1,3 +1,5 @@
+import queue
+from typing import List
 import json
 from os import path
 import numpy as np
@@ -26,7 +28,7 @@ def save_results(tp, tn, fp, fn, labels, results_path, scores=None, delays=None)
 
     if delays is not None:
         results["delay"] = delays
-        print(f"Delay: {np.mean(delays)}")
+        print(f"Delay: {np.mean(delays) :.2f}")
 
     with open(path.join(results_path, "detection.json"), "w") as fd:
         json.dump(results, fd)

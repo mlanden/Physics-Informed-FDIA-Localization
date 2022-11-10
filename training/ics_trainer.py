@@ -11,7 +11,8 @@ import torch
 from pytorch_lightning import LightningModule
 from torch import optim
 
-from models import PredictionModel, get_losses
+from models import PredictionModel, invariant_loss, prediction_loss
+from invariants import evaluate_invariants
 
 
 class ICSTrainer(LightningModule):
@@ -37,10 +38,11 @@ class ICSTrainer(LightningModule):
         self.recent_outputs = None
         self.invariants = None
 
+        self.loss_fns = None
         if self.loss == "invariant":
             with open(self.invariants_path, "rb") as fd:
                 self.invariants = pickle.load(fd)
-        self.loss_fns = get_losses(self.invariants)
+
         self.normal_losses = []
         self.states = []
         self.outputs = []
@@ -62,6 +64,11 @@ class ICSTrainer(LightningModule):
         self.log("train_loss", loss)
         return loss
 
+    def on_validation_start(self):
+        self.loss_fns = [prediction_loss]
+        if self.invariants is not None:
+            self.loss_fns.append(invariant_loss)
+
     def validation_step(self, batch, batch_idx):
         self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
         losses = self.compute_loss(*batch)
@@ -71,52 +78,57 @@ class ICSTrainer(LightningModule):
 
     def test_step(self, batch, batch_idx):
         losses = self.compute_loss(*batch)
-        self.states.append(batch[0].view(1, -1))
+        self.states.append(batch[0].cpu().view(1, -1))
         self.outputs.append(self.recent_outputs)
         self.normal_losses.append(losses)
         return self.recent_outputs
 
     def on_test_start(self):
         self.hidden_states = [None for _ in range(len(self.conf["model"]["hidden_layers"]) - 1)]
-        # if self.n_workers > 0:
-        # Try test w/o invariant losses
-        self.loss_fns = get_losses(None)
+        self.loss_fns = [prediction_loss]
+        if self.n_workers == 0 and self.invariants is not None:
+            self.loss_fns.append(invariant_loss)
+        print(f"{len(self.loss_fns)} loss functions")
 
     def on_test_end(self):
         losses = torch.concat(self.normal_losses, dim=0)
-        # if self.n_workers > 0 and self.loss == "invariant":
-        #     print(f"Evaluating invariants with {self.n_workers} workers", flush=True)
-        #     invariant_losses = evaluate_invariants(self.states, self.outputs, self.invariants, self.n_workers)
-        #     losses = torch.concat([losses, invariant_losses], 1)
+        if self.n_workers > 0 and self.invariants is not None:
+            print(f"Evaluating invariants with {self.n_workers} workers", flush=True)
+            states = torch.concat(self.states, dim=0)
+            invariant_losses = evaluate_invariants(self.invariants, states, self.outputs, self.n_workers)
+            losses = torch.concat([losses, invariant_losses], dim=1)
+            print()
         self.build_normal_profile(losses)
 
     def build_normal_profile(self, losses):
-        best_score = np.Inf
-        best_model = None
-        for i in range(self.max_gmm_components):
-            gmm = GaussianMixture(n_components=i + 1)
-            gmm.fit(losses)
+        # best_score = np.Inf
+        # best_model = None
+        # for i in range(self.max_gmm_components):
+        #     print("Building GMM for i =", i + 1)
+        #     gmm = GaussianMixture(n_components=i + 1)
+        #     gmm.fit(losses)
+        #
+        #     bic = gmm.bic(losses)
+        #     if bic < best_score:
+        #         best_score = bic
+        #         best_model = gmm
+        #
+        # scores = best_model.score_samples(losses)
+        # min_score = np.min(scores)
+        # with open(self.normal_behavior_path, "w") as fd:
+        #     json.dump([min_score], fd)
+        # joblib.dump(best_model, self.normal_model_path)
+        means = torch.mean(losses, dim=0).numpy().flatten()
+        stds = torch.std(losses, dim=0).numpy().flatten()
 
-            bic = gmm.bic(losses)
-            if bic < best_score:
-                best_score = bic
-                best_model = gmm
+        obj = {
+            "mean": means.tolist(),
+            "std": stds.tolist(),
+            "loss": losses.tolist()
+        }
 
-        scores = best_model.score_samples(losses)
-        min_score = np.min(scores)
         with open(self.normal_behavior_path, "w") as fd:
-            json.dump([min_score], fd)
-        joblib.dump(best_model, self.normal_model_path)
-        # means = torch.mean(losses, dim=0).numpy().flatten()
-        # stds = torch.std(losses, dim=0).numpy().flatten()
-        #
-        # obj = {
-        #     "mean": means,
-        #     "std": stds,
-        #     "loss": losses.numpy()
-        # }
-        #
-        # torch.save(obj, self.normal_behavior_path)
+            json.dump(obj, fd)
 
     def compute_loss(self, unscaled_seq, scaled_seq, target):
         self.recent_outputs, self.hidden_states = self.model(unscaled_seq, scaled_seq, self.hidden_states)

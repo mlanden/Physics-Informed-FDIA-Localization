@@ -57,9 +57,7 @@ class Evaluator(ABC):
             if attack_start == -1 and attack:
                 attack_start = step
 
-            start = time.time()
             alert = self.alert(features, target, attack)
-            # print(f"Alerting took {time.time() - start} seconds")
             if attack:
                 if alert:
                     delay = step - attack_start
@@ -72,7 +70,28 @@ class Evaluator(ABC):
                 else:
                     tn += 1
             step += 1
-            msg = f"{step :5d} / {len(self.dataset)}: TP: {tp}, TN: {tn}, FP: {fp}, FN: {fn}"
+
+            msg = f"{step :5d} / {len(self.dataset)}:"
+            if tp + fn > 0:
+                tpr = tp / (tp + fn)
+                msg += f" TPR: {tpr * 100: 3.2f}"
+            else:
+                msg += " TPR: --"
+            if tn + fp > 0:
+                tnr = tn / (tn + fp)
+                msg += f", TNR: {tnr * 100: 3.2f}"
+            else:
+                msg += ", TNR: --"
+            if fp + tn > 0:
+                fpr = fp / (fp + tn)
+                msg += f", FPR: {fpr * 100: 3.2f}"
+            else:
+                msg += ", FPR: --"
+            if fn + tp > 0:
+                fnr = fn / (fn + tp)
+                msg += f", FNR: {fnr * 100:3.2f}"
+            else:
+                msg += ", FNR: --"
             if len(delays) > 0:
                 msg += f", Dwell: {np.mean(delays):.3f}"
             print(f"\r", msg, end="")

@@ -41,7 +41,11 @@ class EventPredicate(Predicate):
         input_idx = 0
         target = 0
         for i, feature_idx in enumerate(self.continuous_features):
-            state_prediction = input_states[:, -1, feature_idx] + continuous_output[:, i]
+            if len(input_states.shape) == 3:
+                state_prediction = input_states[:, -1, feature_idx] + continuous_output[:, i]
+            else:
+                state_prediction = input_states[:, feature_idx] + continuous_output[:, i]
+
             if feature_idx != self.target_idx:
                 input_[:, input_idx] = state_prediction
                 input_idx += 1
@@ -49,7 +53,7 @@ class EventPredicate(Predicate):
                 target = state_prediction.view(-1, 1)
 
         predicted = self.linear_model(input_)
-        confidence = torch.abs(target - predicted)
+        confidence = torch.transpose(torch.abs(target - predicted), 0, 1)
         return confidence
 
     def __hash__(self):

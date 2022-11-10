@@ -23,13 +23,17 @@ class Invariant:
         return True
 
     def confidence(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
-        product = torch.ones((network_outputs[0].shape[0], 1), device=input_states.device)
+        if len(input_states.shape) == 3:
+            input_states = input_states[:, -1, :]
+        product = torch.ones((1, network_outputs[0].shape[0]), device=input_states.device)
         for predicate in self.antecedent_objs:
-            product *= predicate.confidence(input_states, network_outputs)
+            confidence = predicate.confidence(input_states, network_outputs)
+            product *= confidence
 
         for predicate in self.consequent_objs:
-            product *= predicate.confidence(input_states, network_outputs)
-
+            confidence = predicate.confidence(input_states, network_outputs)
+            product *= confidence
+        assert product.shape[0] == 1
         return product
 
     def _convert_predicates(self):

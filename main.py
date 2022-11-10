@@ -6,6 +6,7 @@ import torch
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from torch.utils.data import Subset, DataLoader
+import torch.multiprocessing as mp
 
 from datasets import SWATDataset
 from training import hyperparameter_optimize, ICSTrainer
@@ -17,7 +18,7 @@ def train():
     
     trainer = Trainer(default_root_dir=checkpoint_dir,
                       max_epochs=conf["train"]["epochs"],
-                      devices=conf["train"]["n_workers"],
+                      devices=1,
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       callbacks=[ModelCheckpoint(dirpath=checkpoint_dir,
                                                  filename=checkpoint,
@@ -51,7 +52,8 @@ def train():
 def find_normal_error():
     # device =  torch.device("gpu")
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      # accelerator="gpu" if torch.cuda.is_available() else "cpu"
+                      # accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                      # devices=1
                       )
 
     dataset = SWATDataset(conf, conf["data"]["normal"],
@@ -98,12 +100,13 @@ if __name__ == '__main__':
     # checkpoint_to_load = "/home/mlanden/ICS-Attack-Detection/checkpoint/swat_2015_full/swat_2015_full-v1.ckpt"
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, "last.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, "last-v1.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
     if not path.exists(results_dir):
         os.makedirs(results_dir, exist_ok=True)
+    mp.set_start_method("spawn", force=True)
 
     task = conf["task"]
     print("Task:", task)
