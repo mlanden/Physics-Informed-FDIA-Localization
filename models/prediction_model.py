@@ -32,9 +32,10 @@ class PredictionModel(nn.Module):
                 self.embeddings.append(nn.Embedding(size, self.embedding_size))
             self.classifications.append(nn.Linear(hidden_layers[-1], size))
 
+        self.hidden_size = hidden_layers[0]
         self.rnns = nn.ModuleList()
         for i in range(len(hidden_layers[:-1])):
-            self.rnns.append(nn.LSTM(hidden_layers[i], hidden_layers[i + 1], batch_first=True))
+            self.rnns.append(nn.LSTMCell(hidden_layers[i], hidden_layers[i + 1]))
 
         self.output_linear = nn.Linear(hidden_layers[-1], self.n_features - len(self.categorical_values))
 
@@ -42,18 +43,24 @@ class PredictionModel(nn.Module):
         x = self.embed(unscaled_seq, scaled_seq)
         x = self.input_linear(x)
         x = self.activation(x)
-        for i, rnn in enumerate(self.rnns):
-            hidden = hidden_states[i] if hidden_states is not None else None
-            x, hidden = rnn(x, hidden)
-            if hidden_states is not None:
-                hidden_states[i] = hidden
-            x = self.activation(x)
 
-        x = x[:, -1, :]
-        continuous_outputs = self.output_linear(x)
+        if hidden_states is None:
+            # Batch_size,
+            hx = torch.zeros((x.shape[0], self.hidden_size), dtype=torch.float32, device=x.device)
+            cx = torch.zeros((x.shape[0], self.hidden_size), dtype=torch.float32, device=x.device)
+            hidden_states = (hx, cx)
+
+        for time_step in range(x.shape[1]):
+            input_ = x[:, time_step, :]
+            hidden_states = self.rnns[0](input_, hidden_states)
+            for i in range(1, len(self.rnns)):
+                hidden_states = self.rnns[i](hidden_states[0], hidden_states)
+        output = hidden_states[0]
+
+        continuous_outputs = self.output_linear(output)
         outputs = [continuous_outputs]
         for layer in self.classifications:
-            out = layer(x)
+            out = layer(output)
             outputs.append(out)
 
         return outputs, hidden_states

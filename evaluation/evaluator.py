@@ -20,13 +20,28 @@ class Evaluator(ABC):
         self.results_path = path.join("results", conf["train"]["checkpoint"])
 
     @abstractmethod
-    def alert(self, state, target, attack):
+    def alert(self, states, targets, attacks, intermediates):
         pass
+
+    def process_state(self, state, target):
+        return
 
     def close(self):
         pass
 
     def evaluate(self):
+        states = []
+        targets = []
+        attacks = []
+        intermediates = []
+
+        for state, target, attack in tqdm(DataLoader(self.dataset, batch_size=64)):
+            states.append(state)
+            targets.append(target)
+            attacks.append(attack)
+            intermediates.append(self.process_state(state, target))
+
+        alerts = self.alert(states, targets, attacks, intermediates)
         tp = 0
         tn = 0
         fp = 0
@@ -39,7 +54,9 @@ class Evaluator(ABC):
         attack_detected = False
 
         step = 0
-        for features, target, attack in DataLoader(self.dataset):
+        # self.on_evaluate_end()
+        # quit()
+        for alert, attack in zip(alerts, attacks):
             # if step == 5000:
             #     break
             if attack_start > -1 and not attack:
@@ -49,15 +66,13 @@ class Evaluator(ABC):
                     fn += 1
                 attack_detected = False
 
-            if attack_detected:
-                # Already detected attack
-                continue
-
             labels.append(1 if attack else 0)
             if attack_start == -1 and attack:
                 attack_start = step
 
-            alert = self.alert(features, target, attack)
+            if attack_detected:
+                # Already detected attack
+                continue
             if attack:
                 if alert:
                     delay = step - attack_start

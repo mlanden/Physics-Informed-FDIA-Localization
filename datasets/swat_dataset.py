@@ -12,7 +12,7 @@ from .ics_dataset import ICSDataset
 class SWATDataset(ICSDataset):
     """ Loads an Excel/csv file(s) with physical sensor/actuator readings from a water treatment system"""
 
-    def __init__(self, conf, data_path, sequence_len, train, load_scaler):
+    def __init__(self, conf, data_path, window_size, train, load_scaler):
         self.conf = conf
 
         if data_path.endswith(".xlsx"):
@@ -20,8 +20,8 @@ class SWATDataset(ICSDataset):
         elif data_path.endswith(".csv"):
             self.data = pd.read_csv(data_path, skiprows=0, header=1)
 
-        self.sequence_len = sequence_len
-        self.window_size = conf["model"]["window_size"]
+        self.sequence_len = conf["model"]["sequence_length"]
+        self.window_size = window_size
         self.checkpoint = conf["train"]["checkpoint"]
         self.train = train
         scale_file = path.join("checkpoint", self.checkpoint, "scaler.gz")
@@ -37,10 +37,9 @@ class SWATDataset(ICSDataset):
             joblib.dump(self.scaler, scale_file)
         self.scaled_features = self.scaler.transform(self.features)
 
-        if self.train:
-            self.sequences, self.targets = None, None
-            self.make_sequences()
-            print(f"Created {len(self.sequences)} sequences")
+        self.sequences, self.targets = None, None
+        self.make_sequences()
+        print(f"Created {len(self.sequences)} sequences")
 
     def make_sequences(self):
         self.sequences = []
@@ -57,22 +56,16 @@ class SWATDataset(ICSDataset):
         # self.targets = np.array(self.targets, dtype=np.float32)
 
     def __len__(self):
-        if self.train:
-            return len(self.sequences)
-        else:
-            return len(self.features) - 1
+        return len(self.sequences)
 
     def __getitem__(self, item):
+        seq_bounds = self.sequences[item]
+        unscaled_seq = self.features[seq_bounds[0]: seq_bounds[1]]
+        scaled_seq = self.scaled_features[seq_bounds[0]: seq_bounds[1]]
         if self.train:
-            seq_bounds = self.sequences[item]
-            unscaled_seq = self.features[seq_bounds[0]: seq_bounds[1]]
-            scaled_seq = self.scaled_features[seq_bounds[0]: seq_bounds[1]]
             return unscaled_seq, scaled_seq, self.features[self.targets[item]]
         else:
-            return ((np.array(self.features[item, :], dtype=np.float32),
-                    np.array(self.scaled_features[item, :], dtype=np.float32)),
-                    np.array(self.features[item + 1, :], dtype=np.float32),
-                    self.labels.to_numpy()[item])
+            return unscaled_seq, scaled_seq, self.features[self.targets[item]], self.labels.to_numpy()[item]
 
     def get_data(self):
         return self.features, self.labels

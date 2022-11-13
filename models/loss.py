@@ -9,11 +9,11 @@ from datasets import ICSDataset, SWATDataset
 
 def prediction_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torch.Tensor, categorical_values: dict) -> Union[
     Tuple[torch.Tensor, Tuple], torch.Tensor]:
-    losses = torch.zeros(batch.shape[-1])
+    losses = torch.zeros((batch.shape[0], batch.shape[-1]))
     continuous_idx = 0
     classification_idx = 0
-    class_loss = nn.CrossEntropyLoss()
-    continuous_loss = nn.MSELoss()
+    class_loss = nn.CrossEntropyLoss(reduction="none")
+    continuous_loss = nn.MSELoss(reduction="none")
     for i in range(batch.shape[-1]):
         if i in categorical_values:
             # Cross entropy_loss
@@ -23,13 +23,13 @@ def prediction_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: to
             if categorical_values[i] == 2:
                 target_class[:] -= 1
 
-            losses[i] = class_loss(logits, target_class)
+            losses[:, i] = class_loss(logits, target_class)
             classification_idx += 1
         else:
             # MSE loss
             predicted = outputs[0][:, continuous_idx]
             target_value = target[:, continuous_idx] - batch[:, -1, continuous_idx]
-            losses[i] = continuous_loss(predicted, target_value)
+            losses[:, i] = continuous_loss(predicted, target_value)
             continuous_idx += 1
 
     return losses
@@ -45,5 +45,5 @@ def invariant_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: tor
 
         loss[i, :] = confidence
 
-    return torch.mean(loss, dim=1)
+    return torch.t(loss)
 

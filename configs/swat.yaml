@@ -1,15 +1,17 @@
 #task: train
-task: error
-#task: test
+#task: error
+task: test
 #task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 data:
-  normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
+#  normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: ../data/SWAT/First_Hour_2015.csv
+#  attack: ../data/SWAT/First_Hour_2015.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
-#  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
-  attack: ../data/SWAT/SWaT_Dataset_Attack_v0.csv
+  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
+  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
+#  attack: ../data/SWAT/SWaT_Dataset_Attack_v0.csv
 #  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
   n_features: 51
 
@@ -19,10 +21,10 @@ model:
   embedding_size: 10
   sequence_length: 10
   window_size: 8
+  profile_type: mean
 
 train:
-  n_workers: 4
-  cuda: 0
+  n_workers: 5
   batch_size: 64
   epochs: 100
   lr: 0.001
@@ -35,7 +37,7 @@ train:
   validate_fraction: 0.01
   find_error_fraction: 0.5
   validation_frequency: 1
-  loss: invariant
+  loss: noinvariant
   max_gmm_components: 5
   distribution_threshold: 1.2
   event_predicate_error: 0.0001

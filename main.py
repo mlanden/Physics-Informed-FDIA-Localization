@@ -28,7 +28,7 @@ def train():
                                                  save_on_train_epoch_end=True),
                                  RichProgressBar(leave=True)])
     dataset = SWATDataset(conf, conf["data"]["normal"],
-                          sequence_len=conf["model"]["sequence_length"],
+                          window_size=conf["model"]["window_size"],
                           train=True,
                           load_scaler=False)
     datalen = len(dataset)
@@ -57,7 +57,7 @@ def find_normal_error():
                       )
 
     dataset = SWATDataset(conf, conf["data"]["normal"],
-                          sequence_len=1,
+                          window_size=1,
                           train=True,
                           load_scaler=True)
     model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)#, map_location=device)
@@ -66,21 +66,25 @@ def find_normal_error():
     idx = list(range(start, start + size))
     normal = Subset(dataset, idx)
     print(f"States to test:", len(normal))
-    loader = DataLoader(normal)
+    loader = DataLoader(normal, batch_size=batch_size)
 
     trainer.test(model, loader)
 
 
 def test():
+    trainer = Trainer(default_root_dir=checkpoint_dir,
+                      # accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                      # devices=1
+                      )
     dataset = SWATDataset(conf, conf["data"]["attack"],
-                          sequence_len=1,
+                          window_size=1,
                           train=False,
                           load_scaler=True)
     type_ = conf["train"]["type"]
     if type_ == "prediction":
         model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
-        evaluator = NNEvaluator(conf, model, dataset)
-        evaluator.evaluate()
+        loader = DataLoader(dataset, batch_size=batch_size, drop_last=False)
+        trainer.predict(model, loader)
     elif type_ == "invariants":
         miner = InvariantMiner(conf, dataset)
         miner.evaluate()
@@ -100,13 +104,14 @@ if __name__ == '__main__':
     # checkpoint_to_load = "/home/mlanden/ICS-Attack-Detection/checkpoint/swat_2015_full/swat_2015_full-v1.ckpt"
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, "last-v1.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, "last-v2.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
     if not path.exists(results_dir):
         os.makedirs(results_dir, exist_ok=True)
     mp.set_start_method("spawn", force=True)
+    mp.set_sharing_strategy("file_system")
 
     task = conf["task"]
     print("Task:", task)
@@ -135,7 +140,7 @@ if __name__ == '__main__':
                               train=True,
                               load_scaler=False)
         predicates = generate_predicates(dataset, conf)
-    elif "invariants":
+    elif task == "invariants":
         dataset = SWATDataset(conf, conf["data"]["normal"],
                               sequence_len=conf["model"]["sequence_length"],
                               train=True,

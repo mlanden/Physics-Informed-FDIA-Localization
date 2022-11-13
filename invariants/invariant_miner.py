@@ -435,15 +435,14 @@ def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outpu
     tasks = mp.JoinableQueue()
     results = mp.JoinableQueue()
     work_completed_events = [mp.Event() for _ in range(n_workers)]
+    stop_event = mp.Event()
     for i in range(len(invariants)):
         tasks.put(i)
-    mp.set_start_method("spawn", force=True)
-    mp.set_sharing_strategy("file_system")
+    print(f"Number of tasks: {tasks.qsize()}")
     workers = [mp.Process(target=_invariant_worker, args=(i, invariants, states, combined_outputs, tasks, results,
-                                                          work_completed_events)) for i in range(n_workers)]
+                                                          work_completed_events, stop_event)) for i in range(n_workers)]
     for worker in workers:
         worker.start()
-    print(f"Number of tasks: {tasks.qsize()}")
 
     done = False
     count = 0
@@ -464,17 +463,22 @@ def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outpu
                     break
         except queue.Empty:
             pass
+        except Exception as e:
+            print("Main", e)
+    stop_event.set()
+    print("Results collected", flush=True)
     tasks.join()
     results.join()
     for worker in workers:
         worker.join()
     losses = torch.t(losses)
-    print("Invariants evaluated")
+    print("\nInvariants evaluated")
     return losses
 
 
 def _invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tensor, outputs: List[torch.Tensor],
-                      tasks: mp.JoinableQueue, results: mp.JoinableQueue, worker_end_events: List[mp.Event]):
+                      tasks: mp.JoinableQueue, results: mp.JoinableQueue, worker_end_events: List[mp.Event],
+                      stop_event: mp.Event):
     while tasks.qsize() > 0:
         try:
             inv_id = tasks.get(timeout=0.1)
@@ -484,4 +488,9 @@ def _invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tens
             tasks.task_done()
         except queue.Empty:
             pass
+        except Exception as e:
+            print(f"Rank {rank} exception", e, flush=True)
+
     worker_end_events[rank].set()
+    stop_event.wait()
+    print(f"Worker {rank} exit", flush=True)
