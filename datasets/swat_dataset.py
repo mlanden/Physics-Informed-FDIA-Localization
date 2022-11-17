@@ -9,6 +9,7 @@ from sklearn.preprocessing import StandardScaler
 from .ics_dataset import ICSDataset
 
 
+START = 80000
 class SWATDataset(ICSDataset):
     """ Loads an Excel/csv file(s) with physical sensor/actuator readings from a water treatment system"""
 
@@ -26,8 +27,9 @@ class SWATDataset(ICSDataset):
         self.train = train
         scale_file = path.join("checkpoint", self.checkpoint, "scaler.gz")
 
-        self.features = self.data.iloc[:, 1: -1].to_numpy().astype(np.float32)
-        self.labels = self.data.iloc[:, -1] == "Attack"
+        start = START if train else 0
+        self.features = self.data.iloc[start:, 1: -1].to_numpy().astype(np.float32)
+        self.labels = self.data.iloc[start:, -1] == "Attack"
 
         if load_scaler and path.exists(scale_file):
             self.scaler = joblib.load(scale_file)
@@ -51,9 +53,6 @@ class SWATDataset(ICSDataset):
             self.sequences.append(seq)
             self.targets.append(target)
             i += self.window_size
-
-        # self.sequences = np.array(self.sequences, dtype=np.float32)
-        # self.targets = np.array(self.targets, dtype=np.float32)
 
     def __len__(self):
         return len(self.sequences)

@@ -439,15 +439,16 @@ def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outpu
     for i in range(len(invariants)):
         tasks.put(i)
     print(f"Number of tasks: {tasks.qsize()}")
+    n_tasks = tasks.qsize()
+
     workers = [mp.Process(target=_invariant_worker, args=(i, invariants, states, combined_outputs, tasks, results,
                                                           work_completed_events, stop_event)) for i in range(n_workers)]
     for worker in workers:
         worker.start()
 
-    done = False
     count = 0
     losses = torch.zeros((len(invariants), states.shape[0]))
-    while not done or results.qsize() > 0:
+    while count < n_tasks:
         try:
             id_, confidence = results.get(timeout=0.1)
             losses[id_, :] = confidence
@@ -455,18 +456,11 @@ def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outpu
             count += 1
             print("\r", end="", flush=True)
             print(f"{count} / {len(invariants)} invariants completed", end="", flush=True)
-
-            done = True
-            for e in work_completed_events:
-                if not e.is_set():
-                    done = False
-                    break
         except queue.Empty:
             pass
         except Exception as e:
             print("Main", e)
     stop_event.set()
-    print("Results collected", flush=True)
     tasks.join()
     results.join()
     for worker in workers:
@@ -493,4 +487,3 @@ def _invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tens
 
     worker_end_events[rank].set()
     stop_event.wait()
-    print(f"Worker {rank} exit", flush=True)

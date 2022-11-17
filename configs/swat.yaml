@@ -1,17 +1,18 @@
 #task: train
-#task: error
-task: test
+task: error
+#task: test
 #task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
+#task: roc
 data:
-#  normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
+  normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: ../data/SWAT/First_Hour_2015.csv
 #  attack: ../data/SWAT/First_Hour_2015.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
-  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
-  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
-#  attack: ../data/SWAT/SWaT_Dataset_Attack_v0.csv
+#  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
+#  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
+  attack: ../data/SWAT/SWaT_Dataset_Attack_v0.csv
 #  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
   n_features: 51
 
@@ -21,23 +22,23 @@ model:
   embedding_size: 10
   sequence_length: 10
   window_size: 8
-  profile_type: mean
+  profile_type: gmm
 
 train:
-  n_workers: 5
+  n_workers: 3
   batch_size: 64
   epochs: 100
   lr: 0.001
   regularization: 0.00001
-  checkpoint: swat_2015_full_lr_decay
-  load_checkpoint: 0
+  checkpoint: swat_2015_sequenced
+  load_checkpoint: 1
 
   tensorboard: 1
   train_fraction: 0.2
   validate_fraction: 0.01
   find_error_fraction: 0.5
   validation_frequency: 1
-  loss: noinvariant
+  loss: invariant
   max_gmm_components: 5
   distribution_threshold: 1.2
   event_predicate_error: 0.0001

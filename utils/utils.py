@@ -57,4 +57,4 @@ def make_roc_curve(eval_file):
     plt.plot(fpr, tpr)
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
-    plt.savefig("gmm no invarants.png")
+    plt.savefig("mean invarants.png")

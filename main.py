@@ -10,6 +10,7 @@ import torch.multiprocessing as mp
 
 from datasets import SWATDataset
 from training import hyperparameter_optimize, ICSTrainer
+from utils import make_roc_curve
 from evaluation import NNEvaluator
 from invariants import generate_predicates, InvariantMiner
 
@@ -17,6 +18,7 @@ from invariants import generate_predicates, InvariantMiner
 def train():
     
     trainer = Trainer(default_root_dir=checkpoint_dir,
+                      log_every_n_steps=10,
                       max_epochs=conf["train"]["epochs"],
                       devices=1,
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
@@ -50,17 +52,16 @@ def train():
 
 
 def find_normal_error():
-    # device =  torch.device("gpu")
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      # accelerator="gpu" if torch.cuda.is_available() else "cpu",
-                      # devices=1
+                      devices=1,
+                      accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       )
 
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           window_size=1,
                           train=True,
                           load_scaler=True)
-    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)#, map_location=device)
+    model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
     start = int((train_fraction + validate_fraction) * len(dataset))
     size = int(find_error_fraction * len(dataset))
     idx = list(range(start, start + size))
@@ -73,8 +74,8 @@ def find_normal_error():
 
 def test():
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      # accelerator="gpu" if torch.cuda.is_available() else "cpu",
-                      # devices=1
+                      devices=1,
+                      accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       )
     dataset = SWATDataset(conf, conf["data"]["attack"],
                           window_size=1,
@@ -104,7 +105,7 @@ if __name__ == '__main__':
     # checkpoint_to_load = "/home/mlanden/ICS-Attack-Detection/checkpoint/swat_2015_full/swat_2015_full-v1.ckpt"
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, "last-v2.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, "last.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -147,5 +148,8 @@ if __name__ == '__main__':
                               load_scaler=False)
         miner = InvariantMiner(conf, dataset)
         miner.mine_invariants()
+    elif task == "roc":
+        losses_path = path.join(checkpoint_dir, "evaluation_losses.json")
+        make_roc_curve(losses_path)
     else:
         raise RuntimeError(f"Unknown task: {task}")
