@@ -36,7 +36,9 @@ class SWATDataset(ICSDataset):
         else:
             self.scaler = StandardScaler()
             self.scaler.fit(self.features)
-            joblib.dump(self.scaler, scale_file)
+            print(path.basename(scale_file))
+            if path.exists(path.basename(scale_file)):
+                joblib.dump(self.scaler, scale_file)
         self.scaled_features = self.scaler.transform(self.features)
 
         self.sequences, self.targets = None, None

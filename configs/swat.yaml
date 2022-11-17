@@ -1,7 +1,7 @@
 #task: train
-task: error
+#task: error
 #task: test
-#task: "hyperparameter_optimize"
+task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 #task: roc
@@ -22,7 +22,7 @@ model:
   embedding_size: 10
   sequence_length: 10
   window_size: 8
-  profile_type: gmm
+  profile_type: mean
 
 train:
   n_workers: 3
@@ -30,8 +30,10 @@ train:
   epochs: 100
   lr: 0.001
   regularization: 0.00001
-  checkpoint: swat_2015_sequenced
-  load_checkpoint: 1
+  num_samples: 2
+  checkpoint: swat_2015_no_init
+  checkpoint_dir: checkpoint
+  load_checkpoint: 0
 
   tensorboard: 1
   train_fraction: 0.2

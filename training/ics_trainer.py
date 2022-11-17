@@ -36,14 +36,14 @@ class ICSTrainer(LightningModule):
         self.profile_type = conf["model"]["profile_type"]
         self.load_checkpoint = conf["train"]["load_checkpoint"]
 
-        self.checkpoint_dir = path.join("checkpoint", conf["train"]["checkpoint"])
+        self.checkpoint_dir = path.join(conf["train"]["checkpoint_dir"], conf["train"]["checkpoint"])
         self.results_path = path.join("results", conf["train"]["checkpoint"])
         self.normal_mean_path = path.join(self.checkpoint_dir, "normal_mean.pt")
         self.normal_gmm_path = path.join(self.checkpoint_dir, "normal_gmm.pt")
 
         self.normal_model_path = path.join(self.checkpoint_dir, "normal_model.gz")
         self.normal_losses_path = path.join(self.checkpoint_dir, "normal_losses.pt")
-        self.invariants_path = path.join("checkpoint", conf["train"]["invariants"] + "_invariants.pkl")
+        self.invariants_path = path.join(conf["train"]["checkpoint_dir"], conf["train"]["invariants"] + "_invariants.pkl")
         self.losses_path = path.join(self.checkpoint_dir, "evaluation_losses.pt")#_invariant_std.json")
         self.eval_scores_path = path.join(self.results_path, "evaluation_path.json")
 
@@ -130,21 +130,15 @@ class ICSTrainer(LightningModule):
     def build_normal_profile(self, losses):
         print("Build normal profile", flush=True)
         losses = losses.cpu()
-        train_data = losses.numpy()
+        train_data = losses.numpy()[:100000, :]
         best_score = np.Inf
         best_model = None
         for i in range(self.max_gmm_components):
             print("Building GMM for i =", i + 1)
             gmm = GaussianMixture(n_components=i + 1)
-            print("GMM created", flush=True)
-            print(train_data.shape)
-            print(train_data.dtype)
-            print(np.min(train_data), np.max(train_data))
             gmm.fit(train_data)
-            print("Model fit", flush=True)
 
             bic = gmm.bic(train_data)
-            print("Scored", flush=True)
             if bic < best_score:
                 best_score = bic
                 best_model = gmm

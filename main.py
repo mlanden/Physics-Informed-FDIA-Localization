@@ -8,33 +8,55 @@ from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
 from torch.utils.data import Subset, DataLoader
 import torch.multiprocessing as mp
 
+from pytorch_lightning.loggers import TensorBoardLogger
+from ray import air, tune
+from ray.air import session
+from ray.tune import CLIReporter
+from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
+from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
+
 from datasets import SWATDataset
-from training import hyperparameter_optimize, ICSTrainer
+from training import ICSTrainer
 from utils import make_roc_curve
-from evaluation import NNEvaluator
 from invariants import generate_predicates, InvariantMiner
 
 
-def train():
-    
+def train(config=None):
+    callbacks = [RichProgressBar(leave=True)]
+    if config is not None:
+        print(os.getcwd())
+        callbacks.append(TuneReportCheckpointCallback(
+            metrics={
+                "loss": "val_loss"
+            },
+            filename="checkpoint",
+            on="validation_end"
+        ))
+        conf["train"]["lr"] = config["lr"]
+        conf["train"]["batch_size"] = config["batch_size"]
+    else:
+        callbacks.append(ModelCheckpoint(dirpath=checkpoint_dir,
+                                         filename=checkpoint,
+                                         save_last=True,
+                                         every_n_train_steps=0,
+                                         every_n_epochs=1,
+                                         save_on_train_epoch_end=True)
+                         )
+
     trainer = Trainer(default_root_dir=checkpoint_dir,
                       log_every_n_steps=10,
                       max_epochs=conf["train"]["epochs"],
                       devices=1,
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
-                      callbacks=[ModelCheckpoint(dirpath=checkpoint_dir,
-                                                 filename=checkpoint,
-                                                 save_last=True,
-                                                 every_n_train_steps=0,
-                                                 every_n_epochs=1,
-                                                 save_on_train_epoch_end=True),
-                                 RichProgressBar(leave=True)])
+                      callbacks=callbacks
+                      )
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           window_size=conf["model"]["window_size"],
                           train=True,
                           load_scaler=False)
     datalen = len(dataset)
     train_len = int(datalen * train_fraction)
+    print("train frac", train_len)
     train_idx = list(range(0, train_len))
     train_data = Subset(dataset, train_idx)
     val_len = int(datalen * validate_fraction)
@@ -53,8 +75,8 @@ def train():
 
 def find_normal_error():
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      devices=1,
-                      accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                      # devices=1,
+                      # accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       )
 
     dataset = SWATDataset(conf, conf["data"]["normal"],
@@ -93,6 +115,38 @@ def test():
         raise RuntimeError("Unknown evaluation type")
 
 
+def hyperparameter_optimize():
+    conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
+    conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
+
+    config = {
+        "lr": tune.loguniform(1e-4, 1e-1),
+        "batch_size": tune.choice([32, 64, 128])
+    }
+
+    scheduler = ASHAScheduler(max_t=conf["train"]["epochs"],
+                              grace_period=1,
+                              reduction_factor=2)
+    reporter = CLIReporter(parameter_columns=["lr", "batch_size"],
+                           metric_columns=["loss", "training_iterations"])
+
+    resources = {"cpu": 1, "gpu": 0.5}
+
+    tuner = tune.Tuner(
+        tune.with_resources(train,
+                            resources=resources),
+        tune_config=tune.TuneConfig(metric="loss",
+                                    mode="min",
+                                    scheduler=scheduler,
+                                    num_samples=conf["train"]["num_samples"]),
+        run_config=air.RunConfig(name="tune_ics",
+                                 progress_reporter=reporter),
+        param_space=config
+    )
+    results = tuner.fit()
+    print("Best hyperparameters:", results.get_best_result().config)
+
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("Usage: main.py config")
@@ -126,11 +180,8 @@ if __name__ == '__main__':
     if task == "train":
         train()
     elif task == "hyperparameter_optimize":
-        dataset = SWATDataset(conf, conf["data"]["normal"],
-                              sequence_len=conf["model"]["sequence_length"],
-                              train=True,
-                              load_scaler=False)
-        hyperparameter_optimize(conf, dataset)
+        train_fraction = 0.01
+        hyperparameter_optimize()
     elif task == "error":
         find_normal_error()
     elif task == "test":
