@@ -45,8 +45,8 @@ class ICSTrainer(LightningModule):
         self.normal_losses_path = path.join(self.checkpoint_dir, "normal_losses.pt")
         self.invariants_path = path.join(conf["train"]["checkpoint_dir"], conf["train"]["invariants"] + "_invariants.pkl")
         self.losses_path = path.join(self.checkpoint_dir, "evaluation_losses.pt")#_invariant_std.json")
-        self.eval_scores_path = path.join(self.results_path, "evaluation_path.json")
-
+        self.eval_scores_path = path.join(self.results_path, "evaluation_losses_updated.json")
+        self.anomalies = []
         self.hidden_states = None
         self.recent_outputs = None
         self.invariants = None
@@ -72,17 +72,16 @@ class ICSTrainer(LightningModule):
 
     def configure_optimizers(self):
         optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)  # , weight_decay=self.decay)
-        scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
-                                                               T_max=self.max_epochs,
-                                                               eta_min=self.learning_rate / 50)
-        return [optimizer], [scheduler]
+        # scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(optimizer,
+        #                                                        T_max=self.max_epochs,
+        #                                                        eta_min=self.learning_rate / 50)
+        return [optimizer]#, [scheduler]
 
     def training_step(self, batch, batch_idx):
         self.hidden_states = None
         losses = self.compute_loss(*batch)
-        losses = torch.mean(losses, dim=0)
-        loss = torch.sum(losses)
-        self.log("train_loss", loss)
+        loss = torch.mean(losses)
+        self.log("train_loss", loss, prog_bar=True)
         return loss
 
     def on_validation_start(self):
@@ -93,9 +92,8 @@ class ICSTrainer(LightningModule):
     def validation_step(self, batch, batch_idx):
         self.hidden_states = None
         losses = self.compute_loss(*batch)
-        losses = torch.mean(losses, dim=0)
-        loss = torch.sum(losses)
-        self.log("val_loss", loss)
+        loss = torch.mean(losses)
+        self.log("val_loss", loss, prog_bar=True, on_step=True, on_epoch=True, sync_dist=True)
         return loss
 
     def test_step(self, batch, batch_idx):
@@ -130,37 +128,33 @@ class ICSTrainer(LightningModule):
     def build_normal_profile(self, losses):
         print("Build normal profile", flush=True)
         losses = losses.cpu()
-        train_data = losses.numpy()[:100000, :]
-        best_score = np.Inf
-        best_model = None
-        for i in range(self.max_gmm_components):
-            print("Building GMM for i =", i + 1)
-            gmm = GaussianMixture(n_components=i + 1)
-            gmm.fit(train_data)
-
-            bic = gmm.bic(train_data)
-            if bic < best_score:
-                best_score = bic
-                best_model = gmm
-
-        scores = best_model.score_samples(train_data)
-        min_score = np.min(scores)
-        torch.save(min_score, self.normal_gmm_path)
-        joblib.dump(best_model, self.normal_model_path)
+        # train_data = losses.numpy()[:50000, :]
+        # best_score = np.Inf
+        # best_model = None
+        # for i in range(self.max_gmm_components):
+        #     print("Building GMM for i =", i + 1)
+        #     gmm = GaussianMixture(n_components=i + 1)
+        #     gmm.fit(train_data)
+        #
+        #     bic = gmm.bic(train_data)
+        #     if bic < best_score:
+        #         best_score = bic
+        #         best_model = gmm
+        #
+        # scores = best_model.score_samples(train_data)
+        # min_score = np.min(scores)
+        # torch.save(min_score, self.normal_gmm_path)
+        # joblib.dump(best_model, self.normal_model_path)
 
         means = torch.mean(losses, dim=0).flatten()
-        print("Means computed", flush=True)
         stds = torch.std(losses, dim=0).flatten()
-        print("Stds computed", flush=True)
 
         obj = {
             "mean": means,
             "std": stds,
             "loss": losses
         }
-        print("Object created")
         torch.save(obj, self.normal_mean_path)
-        print("Object saved", flush=True)
 
     def on_predict_start(self):
         self.on_test_start()
@@ -175,7 +169,6 @@ class ICSTrainer(LightningModule):
         if path.exists(self.losses_path) and self.load_checkpoint:
             obj = torch.load(self.losses_path)
             self.losses = obj["losses"]
-            self.attacks = obj["attacks"]
             self.skip_test = True
         else:
             self.losses = []
@@ -183,22 +176,21 @@ class ICSTrainer(LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         unscaled_seq, scaled_seq, targets, attacks = batch
+        self.attacks.append(attacks.cpu().detach())
         if self.skip_test:
             return 0
         self.hidden_states = None
-        self.attacks.append(attacks.cpu().detach())
 
         return self.save_intermediates((unscaled_seq, scaled_seq, targets))
 
     def on_predict_end(self):
+        attacks = torch.concat(self.attacks, dim=0)
         if not self.skip_test:
             losses = torch.concat([loss for loss in self.losses], dim=0).cpu()
-            attacks = torch.concat(self.attacks, dim=0)
             if self.invariants is not None:
                 states = torch.concat(self.states, dim=0).cpu()
                 loss = evaluate_invariants(self.invariants, states, self.outputs, self.n_workers)
                 losses = torch.concat([losses, loss], dim=1)
-            print("Attacks", losses.shape)
             obj = {
                 "losses": losses,
                 "attacks": attacks,
@@ -206,10 +198,9 @@ class ICSTrainer(LightningModule):
             torch.save(obj, self.losses_path)
         else:
             losses = self.losses
-            attacks = self.attacks
 
         alerts = self.alert(losses, attacks)
-        print("aLERTS generated")
+        print("Alerts generated")
         self.detect(alerts, attacks)
 
         with open(self.eval_scores_path, "w") as fd:
@@ -219,22 +210,23 @@ class ICSTrainer(LightningModule):
     def alert(self, losses, attacks):
         if self.profile_type == "gmm":
             scores = self.normal_model.score_samples(losses.numpy())
-            alarm = scores < 0.5 * self.min_score
+            alarms = scores < 0.5 * self.min_score
             # if attack and not alarm:
             #     print(score / self.min_score)
             for score, attack in zip(scores, attacks):
                 self.eval_scores.append((score[0] / self.min_score, attack.float().item()))
         elif self.profile_type == "mean":
-
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
-            alarm = torch.any(scores > 2, dim=1)
-            # if not attack and alarm:
-            #     print(torch.max(score))
-            for score, attack in zip(scores, attacks):
+            alarms = torch.any(scores > 74, dim=1)
+            for score, alarm, attack in zip(scores, alarms, attacks):
+                if alarm and not attack:
+                    self.anomalies.append(torch.argmax(score).item())
                 self.eval_scores.append((torch.max(score).item(), attack.float().item()))
+            anomalies = set(self.anomalies)
+            print(anomalies)
         else:
             raise RuntimeError("Unknown profile type")
-        return alarm
+        return alarms
 
     def detect(self, alerts, attacks):
         tp = 0

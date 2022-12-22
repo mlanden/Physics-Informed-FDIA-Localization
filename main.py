@@ -4,7 +4,8 @@ import yaml
 import sys
 import torch
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar
+from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, LearningRateMonitor
+from pytorch_lightning.strategies import DDPStrategy
 from torch.utils.data import Subset, DataLoader
 import torch.multiprocessing as mp
 
@@ -22,9 +23,8 @@ from invariants import generate_predicates, InvariantMiner
 
 
 def train(config=None):
-    callbacks = [RichProgressBar(leave=True)]
+    callbacks = [RichProgressBar(leave=True), LearningRateMonitor("epoch")]
     if config is not None:
-        print(os.getcwd())
         callbacks.append(TuneReportCheckpointCallback(
             metrics={
                 "loss": "val_loss"
@@ -38,25 +38,37 @@ def train(config=None):
         callbacks.append(ModelCheckpoint(dirpath=checkpoint_dir,
                                          filename=checkpoint,
                                          save_last=True,
-                                         every_n_train_steps=0,
-                                         every_n_epochs=1,
-                                         save_on_train_epoch_end=True)
+                                         every_n_train_steps=10,
+                                         # every_n_epochs=1,
+                                         save_on_train_epoch_end=True,
+                                         save_top_k=1,
+                                         verbose=True)
                          )
-
+    gpus = conf["train"]["gpus"]
+    num_nodes = conf["train"]["nodes"]
+    batch_size = conf["train"]["batch_size"]
+    batch_size = batch_size // gpus // num_nodes
     trainer = Trainer(default_root_dir=checkpoint_dir,
                       log_every_n_steps=10,
+
                       max_epochs=conf["train"]["epochs"],
-                      devices=1,
+                      devices=gpus,
+                      num_nodes=num_nodes,
+                      strategy=DDPStrategy(find_unused_parameters=False),
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
-                      callbacks=callbacks
+                      callbacks=callbacks,
+                      # limit_train_batches=50
+                      # track_grad_norm=2,
+                      # gradient_clip_val=0.1
                       )
+
     dataset = SWATDataset(conf, conf["data"]["normal"],
                           window_size=conf["model"]["window_size"],
                           train=True,
                           load_scaler=False)
     datalen = len(dataset)
     train_len = int(datalen * train_fraction)
-    print("train frac", train_len)
+
     train_idx = list(range(0, train_len))
     train_data = Subset(dataset, train_idx)
     val_len = int(datalen * validate_fraction)
@@ -66,17 +78,19 @@ def train(config=None):
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
     val_loader = DataLoader(validation_data, batch_size=batch_size, shuffle=False, drop_last=False)
     model = ICSTrainer(conf, dataset.get_categorical_features())
-    if load_checkpoint:
+    if load_checkpoint and path.exists(checkpoint_to_load):
         trainer.fit(model, train_loader, val_loader,
                     ckpt_path=checkpoint_to_load)
     else:
+        if load_checkpoint:
+            raise RuntimeError("Could not find checkpoint")
         trainer.fit(model, train_loader, val_loader)
 
 
 def find_normal_error():
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      # devices=1,
-                      # accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                      devices=1,
+                      accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       )
 
     dataset = SWATDataset(conf, conf["data"]["normal"],
@@ -156,10 +170,9 @@ if __name__ == '__main__':
     with open(conf_path, "r") as fd:
         conf = yaml.safe_load(fd)
     checkpoint = conf["train"]["checkpoint"]
-    # checkpoint_to_load = "/home/mlanden/ICS-Attack-Detection/checkpoint/swat_2015_full/swat_2015_full-v1.ckpt"
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, "last.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}.ckpt")  # "last.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)

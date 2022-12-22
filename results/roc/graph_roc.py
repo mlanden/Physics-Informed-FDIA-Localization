@@ -7,8 +7,8 @@ from sklearn.metrics import roc_curve
 
 if __name__ == '__main__':
     print(os.getcwd())
-    files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean"]
-    names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant"]
+    files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean", "updated"]
+    names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant", "Updated"]
 
     fig = plt.figure()
     for i in range(len(files)):
@@ -23,7 +23,12 @@ if __name__ == '__main__':
 
         fpr, tpr, thresholds = roc_curve(labels, scores)
         plt.plot(fpr, tpr, label=names[i])
-
+        print()
+        for i in range(len(tpr)):
+            if .70 < tpr[i] < .75:
+                print(f"{i}, {tpr[i]:0.2f}, {fpr[i]:0.2f}, {thresholds[i]:.2f}")
+        # print(tpr.tolist())
+        # print(thresholds.tolist())
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
     plt.legend()
