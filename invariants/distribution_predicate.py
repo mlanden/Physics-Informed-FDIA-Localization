@@ -61,5 +61,5 @@ class DistributionPredicate(Predicate):
                np.all(self.distribution_idx == other.distribution_idx)
 
     def __str__(self):
-        out = "Distribution:"
+        out = f"Distribution: Index: {self.state_idx}"
         return out

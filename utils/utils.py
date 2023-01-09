@@ -11,12 +11,18 @@ def save_results(tp, tn, fp, fn, labels, results_path, scores=None, delays=None)
     tnr = tn / (tn + fp)
     fpr = fp / (fp + tn)
     fnr = fn / (fn + tp)
+    recall = tpr
+    precision = tp / (tp + fp)
+    f1 = 2 * precision * recall / (precision + recall)
+    accuracy = (tp + tn) / len(labels)
 
-    print("\n")
     print(f"True Positive: {tpr * 100 :3.2f}")
     print(f"True Negative: {tnr * 100 :3.2f}")
     print(f"False Positive: {fpr * 100 :3.2f}")
     print(f"False Negatives: {fnr * 100 :3.2f}")
+    print(f"F1 Score: {f1 * 100 :3.2f}")
+    print(f"Precision: {precision * 100 :3.2f}")
+    print(f"Accuracy: {accuracy * 100 :3.2f}")
     results = {
         "tp": tp,
         "tn": tn,
@@ -36,21 +42,15 @@ def save_results(tp, tn, fp, fn, labels, results_path, scores=None, delays=None)
 
 
 def make_roc_curve(eval_file):
-    print(eval_file)
     with open(eval_file, "r") as fd:
         data = json.load(fd)
 
     labels = []
     scores = []
-    print(len(data))
     for score, label in data:
-        if type(score) is list:
-            score = max(score)
-            print(score)
         scores.append(score)
         labels.append(label)
 
-    print(set(labels))
     fpr, tpr, thresholds = roc_curve(labels, scores)
 
     fig = plt.figure()

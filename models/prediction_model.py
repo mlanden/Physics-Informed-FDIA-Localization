@@ -32,7 +32,7 @@ class PredictionModel(nn.Module):
                 self.embeddings.append(nn.Embedding(size, self.embedding_size))
             self.classifications.append(nn.Linear(hidden_layers[-1], size))
 
-        self.hidden_size = hidden_layers[0]
+        self.hidden_size = hidden_layers[1]
         self.rnns = nn.ModuleList()
         for i in range(len(hidden_layers[:-1])):
             self.rnns.append(nn.LSTMCell(hidden_layers[i], hidden_layers[i + 1]))

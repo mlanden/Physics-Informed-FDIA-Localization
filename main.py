@@ -5,7 +5,7 @@ import sys
 import torch
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, LearningRateMonitor
-from pytorch_lightning.strategies import DDPStrategy
+# from pytorch_lightning.strategies import DDPStrategy
 from torch.utils.data import Subset, DataLoader
 import torch.multiprocessing as mp
 
@@ -54,10 +54,10 @@ def train(config=None):
                       max_epochs=conf["train"]["epochs"],
                       devices=gpus,
                       num_nodes=num_nodes,
-                      strategy=DDPStrategy(find_unused_parameters=False),
+                      # strategy=DDPStrategy(find_unused_parameters=False),
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       callbacks=callbacks,
-                      # limit_train_batches=50
+                      # limit_train_batches=30
                       # track_grad_norm=2,
                       # gradient_clip_val=0.1
                       )
@@ -109,16 +109,16 @@ def find_normal_error():
 
 
 def test():
-    trainer = Trainer(default_root_dir=checkpoint_dir,
-                      devices=1,
-                      accelerator="gpu" if torch.cuda.is_available() else "cpu",
-                      )
     dataset = SWATDataset(conf, conf["data"]["attack"],
                           window_size=1,
                           train=False,
                           load_scaler=True)
     type_ = conf["train"]["type"]
     if type_ == "prediction":
+        trainer = Trainer(default_root_dir=checkpoint_dir,
+                          devices=1,
+                          accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                          )
         model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
         loader = DataLoader(dataset, batch_size=batch_size, drop_last=False)
         trainer.predict(model, loader)
@@ -201,13 +201,13 @@ if __name__ == '__main__':
         test()
     elif task == "predicates":
         dataset = SWATDataset(conf, conf["data"]["normal"],
-                              sequence_len=conf["model"]["sequence_length"],
+                              window_size=1,
                               train=True,
                               load_scaler=False)
         predicates = generate_predicates(dataset, conf)
     elif task == "invariants":
         dataset = SWATDataset(conf, conf["data"]["normal"],
-                              sequence_len=conf["model"]["sequence_length"],
+                              window_size=1,
                               train=True,
                               load_scaler=False)
         miner = InvariantMiner(conf, dataset)

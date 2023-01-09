@@ -4,7 +4,9 @@ from .predicate import Predicate
 
 
 class Invariant:
-    def __init__(self, antecedent: FrozenSet[Predicate], consequent: FrozenSet[Predicate], predicate_map: dict):
+    def __init__(self, antecedent: FrozenSet[Predicate], consequent: FrozenSet[Predicate], support: int,
+                 predicate_map: dict):
+        self.support = support
         self.predicate_map = predicate_map
         self.antecedent = antecedent
         self.consequent = consequent
@@ -42,3 +44,12 @@ class Invariant:
 
         for p in self.consequent:
             self.consequent_objs.append(self.predicate_map[p])
+
+    def __str__(self):
+        out = "Support: " + str(self.support) + "\n"
+        for p in self.antecedent_objs:
+            out += str(p) + "\n"
+        out += "=>\n"
+        for p in self.consequent_objs:
+            out += str(p) + "\n"
+        return out[:-1]

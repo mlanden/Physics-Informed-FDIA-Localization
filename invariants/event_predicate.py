@@ -74,5 +74,5 @@ class EventPredicate(Predicate):
                and self.target_idx == other.target_idx and self.positive_error == other.positive_error
 
     def __str__(self):
-        out = "Event Predicate: "
+        out = f"Event Predicate: Target: {self.target_idx}"
         return out

@@ -53,6 +53,7 @@ class InvariantMiner:
         self.invariants_path = path.join("checkpoint", conf["train"]["invariants"] + "_invariants.pkl")
         self.result_path = path.join("results", self.checkpoint, "invariants")
 
+        self.dataset_size = 0
         self.predicate_counts = None
         self.predicates_satisfied = None
         self.tree = None
@@ -71,19 +72,9 @@ class InvariantMiner:
             with open(self.count_path, "wb") as fd:
                 pickle.dump(self.predicate_counts, fd)
         features, labels = self.dataset.get_data()
+        self.dataset_size = len(features)
 
         print("Predicates assigned")
-        # print(predicates_satisfied.values())
-        # data = defaultdict(lambda: 0)
-        # for i, state in enumerate(features):
-        #     data[i] += len(predicates_satisfied[i])
-        #     print(data.values())
-        # fig, ax = plt.subplots()
-        # ax.boxplot(data.values())
-        # # ax.hist(predicate_counts.values(), bins=25)
-        # # plt.savefig("predicates.png")
-        # plt.savefig("Assigned-predicates.png")
-        # quit()
 
         min_supports = {}
         deletes = []
@@ -94,9 +85,9 @@ class InvariantMiner:
             else:
                 deletes.append(i)
 
-        # for i in reversed(deletes):
-        #     del self.predicates[i]
-        #     del self.predicate_counts[i]
+        for i in reversed(deletes):
+            del self.predicates[i]
+            del self.predicate_counts[i]
 
         print("Mean min support", np.mean(list(min_supports.values())), "Number of states:", len(features))
         if path.exists(self.sets_path) and self.load_checkpoint:
@@ -128,7 +119,6 @@ class InvariantMiner:
         self.generate_rules(closed_sets, pattern_counts)
         print("Number of rules:", len(self.rules))
 
-        # invariants = self.create_invariant_objs()
         with open(self.invariants_path, "wb") as fd:
             pickle.dump(self.rules, fd)
 
@@ -235,7 +225,7 @@ class InvariantMiner:
 
             confidence = pattern_counts[freq_set] / pattern_counts[antecedent]
             if confidence >= self.min_confidence:
-                rule = Invariant(antecedent, consequence, self.index_to_predicate)
+                rule = Invariant(antecedent, consequence, pattern_counts[freq_set] / self.dataset_size, self.index_to_predicate)
                 self.rules.append(rule)
                 rule_sets.append(consequence)
         return rule_sets
@@ -247,14 +237,6 @@ class InvariantMiner:
             rule_sets = self.compute_confidence(freq_set, joined_sets, pattern_counts)
             if len(rule_sets) > 1:
                 self.create_rules(freq_set, rule_sets, pattern_counts)
-
-    def create_invariant_objs(self):
-        invariants = []
-        for antecedent, consequent, confidence in self.rules:
-            antecedents = frozenset([self.index_to_predicate[i] for i in antecedent])
-            consequents = frozenset([self.index_to_predicate[i] for i in consequent])
-            invariants.append(Invariant(antecedents, consequents))
-        return invariants
 
     def create_mappings(self):
         index_to_predicate = {}
@@ -354,7 +336,7 @@ class InvariantMiner:
 
         print(f"There are {len(features)} states.")
         alerts = np.zeros((len(features)))
-        for i, invariant in enumerate(invariants[:50000]):
+        for i, invariant in enumerate(invariants):
             assignments[:, -2] = 1
             assignments[:, -1] = 1
             for predicate in invariant.antecedent:

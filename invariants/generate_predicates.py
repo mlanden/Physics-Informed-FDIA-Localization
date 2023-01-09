@@ -28,11 +28,10 @@ def generate_predicates(dataset: ICSDataset, conf: dict) -> List[Predicate]:
                 predicates.append(CategoricalPredicate(idx, i, val))
         print(f"Categorical predicates: {len(predicates)}")
 
-        distribution_predicates = _generate_distribution_predicates(dataset, conf)
-        predicates.extend(distribution_predicates)
-
         event_predicates = _generate_event_predicates(dataset, conf)
         predicates.extend(event_predicates)
+        distribution_predicates = _generate_distribution_predicates(dataset, conf)
+        predicates.extend(distribution_predicates)
 
         print(f"Distribution predicates: {len(distribution_predicates)}")
         print(f"Event predicates: {len(event_predicates)}")
@@ -107,7 +106,7 @@ def _generate_event_predicates(dataset: ICSDataset, conf: dict) -> List[Predicat
                 y = states[:, target_feature]
 
                 if len(y) > 5:
-                    model = Lasso()
+                    model = Lasso(max_iter=10000)
                     model.fit(x, y)
 
                     y_pred = model.predict(x)
