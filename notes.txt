@@ -1,0 +1,56 @@
+before
+True Positive: 66.67
+True Negative: 20.14
+False Positive: 79.86
+False Negatives: 33.33
+F1 Score: 19.78
+Precision: 11.61
+Accuracy: 26.47
+
+
+after
+True Positive: 53.83
+True Negative: 36.69
+False Positive: 63.31
+False Negatives: 46.17
+F1 Score: 19.36
+Precision: 11.80
+Accuracy: 39.02
+
+with full normal for invariant mining
+True Positive: 3.45
+True Negative: 61.83
+False Positive: 38.17
+False Negatives: 96.55
+F1 Score: 1.99
+Precision: 1.40
+Accuracy: 53.89
+
+Reduced full
+True Positive: 72.20
+True Negative: 82.15
+False Positive: 17.85
+False Negatives: 27.80
+F1 Score: 47.83
+Precision: 35.75
+Accuracy: 80.95
+
+
+full 75% threshold
+True Positive: 72.20
+True Negative: 82.33
+False Positive: 17.67
+False Negatives: 27.80
+F1 Score: 48.03
+Precision: 35.99
+Accuracy: 81.11
+
+
+full 25% threshold
+True Positive: 69.77
+True Negative: 85.33
+False Positive: 14.67
+False Negatives: 30.23
+F1 Score: 50.48
+Precision: 39.55
+Accuracy: 83.45

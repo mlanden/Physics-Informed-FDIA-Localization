@@ -5,16 +5,11 @@ import sys
 import torch
 from pytorch_lightning import Trainer
 from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, LearningRateMonitor
-# from pytorch_lightning.strategies import DDPStrategy
+from pytorch_lightning.plugins import DDPPlugin
 from torch.utils.data import Subset, DataLoader
 import torch.multiprocessing as mp
 
 from pytorch_lightning.loggers import TensorBoardLogger
-from ray import air, tune
-from ray.air import session
-from ray.tune import CLIReporter
-from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
-from ray.tune.integration.pytorch_lightning import TuneReportCallback, TuneReportCheckpointCallback
 
 from datasets import SWATDataset
 from training import ICSTrainer
@@ -25,6 +20,7 @@ from invariants import generate_predicates, InvariantMiner
 def train(config=None):
     callbacks = [RichProgressBar(leave=True), LearningRateMonitor("epoch")]
     if config is not None:
+        from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
         callbacks.append(TuneReportCheckpointCallback(
             metrics={
                 "loss": "val_loss"
@@ -38,23 +34,22 @@ def train(config=None):
         callbacks.append(ModelCheckpoint(dirpath=checkpoint_dir,
                                          filename=checkpoint,
                                          save_last=True,
-                                         every_n_train_steps=10,
+                                         # every_n_train_steps=10,
                                          # every_n_epochs=1,
                                          save_on_train_epoch_end=True,
                                          save_top_k=1,
                                          verbose=True)
                          )
-    gpus = conf["train"]["gpus"]
     num_nodes = conf["train"]["nodes"]
     batch_size = conf["train"]["batch_size"]
     batch_size = batch_size // gpus // num_nodes
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      log_every_n_steps=10,
-
+                      # log_every_n_steps=10,
                       max_epochs=conf["train"]["epochs"],
                       devices=gpus,
                       num_nodes=num_nodes,
                       # strategy=DDPStrategy(find_unused_parameters=False),
+                      strategy=DDPPlugin(find_unused_parameters=False),
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       callbacks=callbacks,
                       # limit_train_batches=30
@@ -67,12 +62,12 @@ def train(config=None):
                           train=True,
                           load_scaler=False)
     datalen = len(dataset)
+    invariant_len = int(datalen * invariant_fraction)
     train_len = int(datalen * train_fraction)
-
-    train_idx = list(range(0, train_len))
+    train_idx = list(range(invariant_len, train_len))
     train_data = Subset(dataset, train_idx)
     val_len = int(datalen * validate_fraction)
-    val_idx = list(range(train_len, train_len + val_len))
+    val_idx = list(range(invariant_len + train_len, invariant_len + train_len + val_len))
     validation_data = Subset(dataset, val_idx)
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
@@ -98,7 +93,8 @@ def find_normal_error():
                           train=True,
                           load_scaler=True)
     model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
-    start = int((train_fraction + validate_fraction) * len(dataset))
+    print("Testing with", checkpoint_to_load)
+    start = int((invariant_fraction + train_fraction + validate_fraction) * len(dataset))
     size = int(find_error_fraction * len(dataset))
     idx = list(range(start, start + size))
     normal = Subset(dataset, idx)
@@ -130,6 +126,10 @@ def test():
 
 
 def hyperparameter_optimize():
+    from ray import air, tune
+    from ray.tune import CLIReporter
+    from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
+
     conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
     conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
 
@@ -172,7 +172,7 @@ if __name__ == '__main__':
     checkpoint = conf["train"]["checkpoint"]
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}.ckpt")  # "last.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}-v1.ckpt")  # "last.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -183,6 +183,8 @@ if __name__ == '__main__':
 
     task = conf["task"]
     print("Task:", task)
+    gpus = conf["train"]["gpus"]
+    invariant_fraction = conf["train"]["invariant_fraction"]
     train_fraction = conf["train"]["train_fraction"]
     validate_fraction = conf["train"]["validate_fraction"]
     batch_size = conf["train"]["batch_size"]

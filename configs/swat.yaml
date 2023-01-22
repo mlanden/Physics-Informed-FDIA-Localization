@@ -1,17 +1,15 @@
 #task: train
-#task: error
+task: error
 task: test
 #task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 data:
-  normal: ../data/SWAT/SWAT_NDSS_Normal.csv
-#  normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
-#  normal: ../data/SWAT/First_Hour_2015.csv
-#  attack: ../data/SWAT/First_Hour_2015.csv
+#  normal: ../data/SWAT/SWAT_NDSS_Normal.csv
+  normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
+#  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWAT_NDSS_Normal.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
-#  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
 #  attack: ../data/SWAT/SWaT_Dataset_Attack_v0.csv
   attack: ../data/SWAT/SWaT_Dataset_Attack_modified.csv
 #  attack: ../data/SWAT/SWAT_NDSS_Attack.csv
@@ -19,44 +17,48 @@ data:
   n_features: 51
 
 model:
-#  hidden_layers: [50, 20]
-  hidden_layers: [100, 100]
+  hidden_layers: [50, 20]
+#  hidden_layers: [100, 100]
   activation: leakyRelu
   embedding_size: 10
   sequence_length: 10
-  window_size: 2
+  window_size: 8
   profile_type: mean
+  profile_type: gmm
 
 train:
-  n_workers: 3
-  gpus: 1
+  n_workers: 0
+  gpus: 4
   nodes: 1
   batch_size: 64
   epochs: 500
-  lr: 0.05
-  regularization: 0.00001
+  lr: 0.1
+  regularization: 0.0001
   num_samples: 2
-#  checkpoint: swat_ndss_lr
-#  checkpoint: swat_invariants
-  checkpoint: swat_2015_sequenced
+  checkpoint: swat_fps_full
+#  checkpoint: swat_prediction
+#  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
   load_checkpoint: 1
 
   tensorboard: 1
-  train_fraction: 0.2
-  validate_fraction: 0.01
-  find_error_fraction: 0.5
-  validation_frequency: 1
-  loss: invariant
+  train_fraction: 0.3
+#  train_fraction: 0.8
+  invariant_fraction: 0.2
+  validate_fraction: 0.1
+  find_error_fraction: 0.4
+#  validation_frequency: 1
+  loss: noinvariant
   max_gmm_components: 5
   distribution_threshold: 1.2
   event_predicate_error: 0.0001
   gamma: 0.9
-#  gamma: 0.6
-#  theta: 0.1
-  theta: 0.08
+#  gamma: 0.7
+  theta: 0.1
+#  theta: 0.08
   max_depth: 2
   min_confidence: 0.8
-#  type: invariants
+  type: invariants
   type: prediction
-  invariants: swat
+  invariants: swat_reduced
+#  invariants: swat_benchmark

@@ -1,3 +1,4 @@
+import json
 import os
 import sys
 
@@ -9,17 +10,15 @@ import torch.multiprocessing as mp
 import numpy as np
 import pickle
 from os import path
-import matplotlib
 from typing import List
 import queue
 
 import torch
 from .invariant import Invariant
 from datasets import ICSDataset
-from utils import cfp_growth, save_results
-
-matplotlib.use("agg")
-import matplotlib.pyplot as plt
+from utils import cfp_growth
+from .distribution_predicate import DistributionPredicate
+from sklearn.metrics import confusion_matrix
 
 sys.setrecursionlimit(50000)
 
@@ -32,6 +31,8 @@ class InvariantMiner:
         self.load_checkpoint = conf["train"]["load_checkpoint"]
         self.predicate_path = path.join("checkpoint", self.checkpoint, "predicates.pkl")
         self.n_workers = conf["train"]["n_workers"]
+        self.invariant_fraction = conf["train"]["invariant_fraction"]
+        self.validate_fraction = conf["train"]["validate_fraction"]
         self.local_min_support = conf["train"]["gamma"]
         self.global_min_support = conf["train"]["theta"]
         self.max_depth = conf["train"]["max_depth"]
@@ -44,7 +45,6 @@ class InvariantMiner:
             self.predicates = pickle.load(fd)
         print(f"Loaded {len(self.predicates)} predicates")
 
-        self.index_to_predicate, self.predicate_to_index = self.create_mappings()
         self.assign_path = path.join("checkpoint", self.checkpoint, "assigned_predicates.pkl")
         self.count_path = path.join("checkpoint", self.checkpoint, "count_predicates.pkl")
         self.sets_path = path.join("checkpoint", self.checkpoint, "predicate_sets.pkl")
@@ -54,12 +54,39 @@ class InvariantMiner:
         self.result_path = path.join("results", self.checkpoint, "invariants")
 
         self.dataset_size = 0
+        self.invalid_invariants = 0
+        self.features = None
         self.predicate_counts = None
         self.predicates_satisfied = None
         self.tree = None
-        self.rules = None
+        self.invariants = None
 
     def mine_invariants(self):
+        self.invariants = []
+        # predicates = self.predicates
+        #
+        # # Mode 1
+        # self.predicates = []
+        # for p in predicates:
+        #     if type(p) is DistributionPredicate:
+        #         self.predicates.append(p)
+        # self._add_rules()
+
+        # Mode 2
+        # self.predicates = predicates
+        self._add_rules()
+        print(f"Invalid invariants: {self.invalid_invariants}")
+        # self.evaluate(score=False)
+
+        print(f"Saved {len(self.invariants)} invariants")
+        with open(self.invariants_path, "wb") as fd:
+            pickle.dump(self.invariants, fd)
+
+    def _add_rules(self):
+        self.features, labels = self.dataset.get_data()
+        self.dataset_size = int(len(self.features) * self.invariant_fraction)
+        self.features = self.features[:self.dataset_size, :]
+        print(f"Using {len(self.predicates)} predicates")
         if path.exists(self.assign_path) and self.load_checkpoint:
             with open(self.assign_path, "rb") as fd:
                 self.predicates_satisfied = pickle.load(fd)
@@ -71,25 +98,23 @@ class InvariantMiner:
                 pickle.dump(self.predicates_satisfied, fd)
             with open(self.count_path, "wb") as fd:
                 pickle.dump(self.predicate_counts, fd)
-        features, labels = self.dataset.get_data()
-        self.dataset_size = len(features)
 
         print("Predicates assigned")
 
         min_supports = {}
-        deletes = []
         for i, predicate in enumerate(self.predicates):
             if self.predicate_counts[i] > 0:
-                min_supports[i] = max(self.local_min_support * self.predicate_counts[i], len(features) *
+                min_supports[i] = max(self.local_min_support * self.predicate_counts[i], len(self.features) *
                                       self.global_min_support)
+                # print(min_supports[i])
             else:
-                deletes.append(i)
+                min_supports[i] = len(self.features)
 
-        for i in reversed(deletes):
-            del self.predicates[i]
-            del self.predicate_counts[i]
-
-        print("Mean min support", np.mean(list(min_supports.values())), "Number of states:", len(features))
+        for i in self.predicates_satisfied.values():
+            for pred in i:
+                assert pred < len(self.predicates), f"{pred} not a predicate"
+        self.index_to_predicate, self.predicate_to_index = self.create_mappings()
+        print("Mean min support", np.mean(list(min_supports.values())), "Number of states:", len(self.features))
         if path.exists(self.sets_path) and self.load_checkpoint:
             with open(self.sets_path, "rb") as fd:
                 closed_sets = pickle.load(fd)
@@ -117,13 +142,9 @@ class InvariantMiner:
                 pickle.dump(closed_sets, fd)
 
         self.generate_rules(closed_sets, pattern_counts)
-        print("Number of rules:", len(self.rules))
-
-        with open(self.invariants_path, "wb") as fd:
-            pickle.dump(self.rules, fd)
+        print("Number of rules:", len(self.invariants))
 
     def generate_rules(self, closed_sets, predicate_counts):
-        self.rules = []
         for i in range(1, len(closed_sets)):
             print(f"Generating rules for {i} / {len(closed_sets)} closed sets")
             for j, freq_sets in enumerate(closed_sets[i]):
@@ -223,11 +244,19 @@ class InvariantMiner:
             if antecedent not in pattern_counts:
                 pattern_counts[antecedent] = self.tree.support(list(antecedent))
 
+            valid = True
+            for p in antecedent:
+                if p in consequence:
+                    valid = False
+                    break
             confidence = pattern_counts[freq_set] / pattern_counts[antecedent]
             if confidence >= self.min_confidence:
-                rule = Invariant(antecedent, consequence, pattern_counts[freq_set] / self.dataset_size, self.index_to_predicate)
-                self.rules.append(rule)
-                rule_sets.append(consequence)
+                if valid:
+                    rule = Invariant(antecedent, consequence, pattern_counts[freq_set] / self.dataset_size, self.index_to_predicate)
+                    self.invariants.append(rule)
+                    rule_sets.append(consequence)
+                else:
+                    self.invalid_invariants += 1
         return rule_sets
 
     def create_rules(self, freq_set: frozenset, predicates: List, pattern_counts: dict):
@@ -248,7 +277,6 @@ class InvariantMiner:
 
     def assign_predicates(self) -> Tuple[dict, dict]:
         """Determine which states satisfy each predicate"""
-        features, labels = self.dataset.get_data()
         predicate_counts = {}
         for p in range(len(self.predicates)):
             predicate_counts[p] = 0
@@ -259,7 +287,7 @@ class InvariantMiner:
             events = [mp.Event() for _ in range(self.n_workers)]
             for p in range(len(self.predicates)):
                 task_queue.put(p)
-            workers = [mp.Process(target=self._assign_predicates, args=(i, features, task_queue, result_queue, events))
+            workers = [mp.Process(target=self._assign_predicates, args=(i, self.features, task_queue, result_queue, events))
                        for i in range(self.n_workers)]
             for worker in workers:
                 worker.start()
@@ -269,7 +297,7 @@ class InvariantMiner:
             while result_queue.qsize() > 0 or not done:
                 try:
                     p_idx, predicates_result = result_queue.get(timeout=1)
-                    for state_idx in range(len(features)):
+                    for state_idx in range(len(self.features)):
                         if predicates_result[state_idx]:
                             predicate_counts[p_idx] += 1
                             predicates_satisfied[state_idx].append(p_idx)
@@ -291,8 +319,8 @@ class InvariantMiner:
                 worker.join()
         else:
             for i, p in enumerate(self.predicates):
-                res = p.is_satisfied(features)
-                for state_idx in range(len(features)):
+                res = p.is_satisfied(self.features)
+                for state_idx in range(len(self.features)):
                     if res[state_idx]:
                         predicate_counts[i] += 1
                         predicates_satisfied[state_idx].append(i)
@@ -314,15 +342,20 @@ class InvariantMiner:
         results.close()
         work_completed_events[rank].set()
 
-    def evaluate(self):
-        features, labels = self.dataset.get_data()
+    def evaluate(self, score=True):
+        self.features, labels = self.dataset.get_data()
+        if not score:
+            # Use validation states
+            val_len = int(self.validate_fraction * len(self.features))
+            self.features = self.features[self.dataset_size: self.dataset_size + val_len, :]
+            labels = labels.iloc[self.dataset_size: self.dataset_size + val_len]
         self.assign_path = path.join("results", self.checkpoint, "assigned_predicates.pkl")
         if self.load_checkpoint and path.exists(self.assign_path):
             with open(self.assign_path, "rb") as fd:
                 assignments = pickle.load(fd)
         else:
             self.predicate_counts, self.predicates_satisfied = self.assign_predicates()
-            assignments = np.zeros((len(features), len(self.predicate_counts) + 2))
+            assignments = np.zeros((len(self.features), len(self.predicates) + 2))
             for state in self.predicates_satisfied:
                 for p in self.predicates_satisfied[state]:
                     assignments[state, p] = 1
@@ -330,12 +363,15 @@ class InvariantMiner:
             with open(self.assign_path, "wb") as fd:
                 pickle.dump(assignments, fd)
 
-        ante, conseq = [], []
-        with open(self.invariants_path, "rb") as fd:
-            invariants = pickle.load(fd)
+        if self.invariants is not None:
+            invariants = self.invariants
+        else:
+            with open(self.invariants_path, "rb") as fd:
+                invariants = pickle.load(fd)
 
-        print(f"There are {len(features)} states.")
-        alerts = np.zeros((len(features)))
+        print(f"There are {len(self.features)} states.")
+        alerts = np.zeros((len(self.features)))
+        false_positives = [0 for _ in invariants]
         for i, invariant in enumerate(invariants):
             assignments[:, -2] = 1
             assignments[:, -1] = 1
@@ -346,30 +382,41 @@ class InvariantMiner:
                 assignments[assignments[:, predicate] == 0, -1] = 0
 
             alerts[(assignments[:, -2] == 1) & (assignments[:, -1] == 0)] = 1
+            false_positives[i] = np.count_nonzero((assignments[:, -2] == 1) & (assignments[:, -1] == 0) & ~labels)
             print(f"\rCompleted {i} / {len(invariants)} invariants", end="")
 
-            # print(
-            #     f"Complete {inv_idx} / {len(invariants)} invariants. Unmatched {antecedents_unmatched},")  # , end="\r")
-
-        tp = 0
-        tn = 0
-        fp = 0
-        fn = 0
-        for alert, attack in zip(alerts, labels):
-            if attack:
-                if alert:
-                    tp += 1
-                else:
-                    fn += 1
-            else:
-                if alert:
-                    fp += 1
-                else:
-                    tn += 1
-        if not path.exists(self.result_path):
-            os.makedirs(self.result_path)
         print()
-        save_results(tp, tn, fp, fn, labels.tolist(), self.result_path)
+        if score:
+            cm = confusion_matrix(labels, alerts)
+            tp = cm[1][1]
+            fp = cm[0][1]
+            fn = cm[1][0]
+            tn = cm[0][0]
+
+            tpr = tp / (tp + fn)
+            tnr = tn / (tn + fp)
+            fpr = fp / (fp + tn)
+            fnr = fn / (fn + tp)
+            recall = tpr
+            precision = tp / (tp + fp)
+            f1 = 2 * precision * recall / (precision + recall)
+            accuracy = (tp + tn) / len(alerts)
+            print(f"True Positive: {tpr * 100 :3.2f}")
+            print(f"True Negative: {tnr * 100 :3.2f}")
+            print(f"False Positive: {fpr * 100 :3.2f}")
+            print(f"False Negatives: {fnr * 100 :3.2f}")
+            print(f"F1 Score: {f1 * 100 :3.2f}")
+            print(f"Precision: {precision * 100 :3.2f}")
+            print(f"Accuracy: {accuracy * 100 :3.2f}")
+        else:
+            # Remove invariants above 75% quartile
+            threshold = np.quantile(false_positives, 0.1)
+            for i in reversed(range(len(self.invariants))):
+                if false_positives[i] > threshold:
+                    del self.invariants[i]
+
+            with open("fp_invariants.json", "w") as fd:
+                json.dump(false_positives, fd)
 
 
 def _closed_sets_worker(rank: int, pattern_sizes: dict, tasks: mp.Queue, results: mp.Queue,
@@ -407,7 +454,8 @@ def create_apriori_sets(sets, k):
 def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outputs: List[List[torch.Tensor]],
                         n_workers) -> torch.Tensor:
     if n_workers <= 0:
-        raise RuntimeError("Cannot use multiprocessing for 1 worker")
+        raise RuntimeError("Cannot use multiprocessing for 0 worker")
+
     combined_outputs = []
     for i in range(len(outputs[0])):
         outs = [outputs[place][i].cpu().detach() for place in range(len(outputs))]
@@ -420,7 +468,7 @@ def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outpu
     stop_event = mp.Event()
     for i in range(len(invariants)):
         tasks.put(i)
-    print(f"Number of tasks: {tasks.qsize()}")
+    print(f"Number of tasks: {tasks.qsize()}", flush=True)
     n_tasks = tasks.qsize()
 
     workers = [mp.Process(target=_invariant_worker, args=(i, invariants, states, combined_outputs, tasks, results,

@@ -27,8 +27,7 @@ class SWATDataset(ICSDataset):
         self.train = train
         scale_file = path.join("checkpoint", self.checkpoint, "scaler.gz")
 
-        # start = START if train else 0
-        start = 0
+        start = START if train else 0
         self.features = self.data.iloc[start:, 1: -1].to_numpy().astype(np.float32)
         self.labels = self.data.iloc[start:, -1] == "Attack"
 
@@ -37,7 +36,6 @@ class SWATDataset(ICSDataset):
         else:
             self.scaler = StandardScaler()
             self.scaler.fit(self.features)
-            print(path.basename(scale_file))
             if path.exists(path.basename(scale_file)):
                 joblib.dump(self.scaler, scale_file)
         self.scaled_features = self.scaler.transform(self.features)

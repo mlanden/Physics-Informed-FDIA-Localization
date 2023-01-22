@@ -106,7 +106,7 @@ def _generate_event_predicates(dataset: ICSDataset, conf: dict) -> List[Predicat
                 y = states[:, target_feature]
 
                 if len(y) > 5:
-                    model = Lasso(max_iter=10000)
+                    model = Lasso()
                     model.fit(x, y)
 
                     y_pred = model.predict(x)

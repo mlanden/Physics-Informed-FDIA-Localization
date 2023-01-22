@@ -44,7 +44,7 @@ def invariant_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: tor
         confidence = invariant.confidence(batch, outputs) * invariant.support
         # print(confidence, invariant.support)
 
-        loss[i, :] = confidence
+        loss[i, :] = confidence * invariant.support
 
     loss = torch.t(loss)
     return torch.mean(loss, dim=1)
