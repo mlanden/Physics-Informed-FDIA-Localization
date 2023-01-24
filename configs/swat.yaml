@@ -1,6 +1,6 @@
-#task: train
-task: error
-task: test
+task: train
+#task: error
+#task: test
 #task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
@@ -35,7 +35,7 @@ train:
   lr: 0.1
   regularization: 0.0001
   num_samples: 2
-  checkpoint: swat_fps_full
+  checkpoint: swat_schedule
 #  checkpoint: swat_prediction
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
@@ -48,7 +48,7 @@ train:
   validate_fraction: 0.1
   find_error_fraction: 0.4
 #  validation_frequency: 1
-  loss: noinvariant
+  loss: invariant
   max_gmm_components: 5
   distribution_threshold: 1.2
   event_predicate_error: 0.0001

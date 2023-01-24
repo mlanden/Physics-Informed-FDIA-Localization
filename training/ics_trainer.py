@@ -76,7 +76,7 @@ class ICSTrainer(LightningModule):
         # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer,
         #                                                        T_max=self.max_epochs,
         #                                                        eta_min=self.learning_rate / 50)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5)
         # return [optimizer], [scheduler]
         return {
             "optimizer": optimizer,
@@ -227,11 +227,11 @@ class ICSTrainer(LightningModule):
         if self.profile_type == "gmm":
             print("Min", self.min_score)
             scores = self.normal_model.score_samples(losses.numpy())
-            alarms = scores < 0.5 * self.min_score
+            alarms = scores < 1.14 * self.min_score
             # if attack and not alarm:
             #     print(score / self.min_score)
             for score, attack in zip(scores, attacks):
-                self.eval_scores.append((score / self.min_score, attack.float().item()))
+                self.eval_scores.append((-score / self.min_score, attack.float().item()))
         elif self.profile_type == "mean":
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             # alarms = torch.any(scores > 7, dim=1)
