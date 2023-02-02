@@ -32,7 +32,7 @@ def prediction_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: to
             losses[:, i] = continuous_loss(predicted, target_value)
             continuous_idx += 1
 
-    return 2 * torch.mean(losses, dim=1)
+    return losses
 
 
 def invariant_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torch.Tensor, categorical_values: dict,
@@ -47,5 +47,5 @@ def invariant_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: tor
         loss[i, :] = confidence * invariant.support
 
     loss = torch.t(loss)
-    return torch.mean(loss, dim=1)
+    return loss
 

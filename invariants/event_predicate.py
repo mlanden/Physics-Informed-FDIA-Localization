@@ -42,7 +42,7 @@ class EventPredicate(Predicate):
         target = 0
         for i, feature_idx in enumerate(self.continuous_features):
             if len(input_states.shape) == 3:
-                state_prediction = input_states[:, -1, feature_idx] + continuous_output[:, i]
+                state_prediction = input_states[:, feature_idx] + continuous_output[:, i]
             else:
                 state_prediction = input_states[:, feature_idx] + continuous_output[:, i]
 

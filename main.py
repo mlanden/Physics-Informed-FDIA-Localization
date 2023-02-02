@@ -84,7 +84,7 @@ def train(config=None):
 
 def find_normal_error():
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      devices=1,
+                      devices=gpus,
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       )
 
@@ -112,7 +112,7 @@ def test():
     type_ = conf["train"]["type"]
     if type_ == "prediction":
         trainer = Trainer(default_root_dir=checkpoint_dir,
-                          devices=1,
+                          devices=2,
                           accelerator="gpu" if torch.cuda.is_available() else "cpu",
                           )
         model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)

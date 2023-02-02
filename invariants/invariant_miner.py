@@ -3,6 +3,7 @@ import os
 import sys
 
 import time
+import traceback
 from typing import List, Tuple
 from collections import defaultdict
 import torch.multiprocessing as mp
@@ -456,12 +457,6 @@ def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outpu
     if n_workers <= 0:
         raise RuntimeError("Cannot use multiprocessing for 0 worker")
 
-    combined_outputs = []
-    for i in range(len(outputs[0])):
-        outs = [outputs[place][i].cpu().detach() for place in range(len(outputs))]
-        torch_output = torch.cat(outs, dim=0)
-        combined_outputs.append(torch_output)
-
     tasks = mp.JoinableQueue()
     results = mp.JoinableQueue()
     work_completed_events = [mp.Event() for _ in range(n_workers)]
@@ -471,7 +466,7 @@ def evaluate_invariants(invariants: List[Invariant], states: torch.Tensor, outpu
     print(f"Number of tasks: {tasks.qsize()}", flush=True)
     n_tasks = tasks.qsize()
 
-    workers = [mp.Process(target=_invariant_worker, args=(i, invariants, states, combined_outputs, tasks, results,
+    workers = [mp.Process(target=_invariant_worker, args=(i, invariants, states, outputs, tasks, results,
                                                           work_completed_events, stop_event)) for i in range(n_workers)]
     for worker in workers:
         worker.start()
@@ -513,7 +508,7 @@ def _invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tens
         except queue.Empty:
             pass
         except Exception as e:
-            print(f"Rank {rank} exception", e, flush=True)
+            traceback.print_exc()
 
     worker_end_events[rank].set()
     stop_event.wait()
