@@ -173,7 +173,6 @@ class ICSTrainer(LightningModule):
 
     def _prep_evaluate_invariants(self):
         states = torch.concat(self.states, dim=0)
-        print("states", states.shape, flush=True)
         combined_outputs = []
         for i in range(len(self.outputs[0])):
             outs = [self.outputs[place][i].cpu().detach() for place in range(len(self.outputs))]
@@ -186,7 +185,7 @@ class ICSTrainer(LightningModule):
                 combined_outputs[i] = self.all_gather(combined_outputs[i])
                 combined_outputs[i] = combined_outputs[i].view(combined_outputs[i].shape[0] *
                                                                combined_outputs[i].shape[1], -1)
-                print(i, combined_outputs[i].shape, flush=True)
+                # print(i, combined_outputs[i].shape, flush=True)
         return combined_outputs, states
 
     def build_normal_profile(self, losses):
@@ -252,16 +251,13 @@ class ICSTrainer(LightningModule):
         attacks = torch.concat(self.attacks, dim=0)
         if not self.skip_test:
             losses = torch.concat([loss for loss in self.losses], dim=0)
-            print("Loss", losses.shape, flush=True)
             if self.trainer.gpus != 1:
                 losses = self.all_gather(losses)
                 losses = losses.view(losses.shape[0] * losses.shape[1], -1)
                 attacks = self.all_gather(attacks)
                 attacks = attacks.view(attacks.shape[0] * attacks.shape[1], -1)
-            print(losses.shape, flush=True)
             if self.invariants is not None:
                 combined_outputs, states = self._prep_evaluate_invariants()
-                print("states", states.shape, flush=True)
                 if self.global_rank == 0:
                     losses = losses.cpu()
                     invariant_losses = evaluate_invariants(self.invariants, states, combined_outputs, self.n_workers)
