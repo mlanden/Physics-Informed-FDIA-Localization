@@ -61,9 +61,17 @@ class ICSTrainer(LightningModule):
         if self.loss == "invariant":
             with open(self.invariants_path, "rb") as fd:
                 self.invariants = pickle.load(fd)
+            anteceds = []
+            consequents = []
+            for i in self.invariants:
+                anteceds.append(len(i.antecedent))
+                consequents.append(len(i.consequent))
+            print("Mean antecedent:", np.mean(anteceds))
+            print("Mean consequent:", np.mean(consequents))
 
         self.losses = []
         self.states = []
+        self.batch_ids = []
         self.outputs = []
         self.attacks = []
         self.eval_scores = []
@@ -88,17 +96,23 @@ class ICSTrainer(LightningModule):
 
     def training_step(self, batch, batch_idx):
         self.hidden_states = None
-        losses = self.compute_loss(*batch)
-        for i in range(len(losses)):
-            losses[i] = torch.mean(losses[i]).view(1, 1)
-        losses = torch.cat(losses)
+        losses = self._compute_combine_losses(batch)
+
         for i in range(len(self.loss_names)):
             self.log(self.loss_names[i] + "_Train_loss", losses[i], prog_bar=True, on_step=False,
                      on_epoch=True, sync_dist=False)
-        losses = torch.mean(losses, dim=0)
+
         loss = torch.sum(losses)
         self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=False)
         return loss
+
+    def _compute_combine_losses(self, batch):
+        losses = self.compute_loss(*batch)
+        for i in range(len(losses)):
+            losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
+        losses = torch.cat(losses, dim=1)
+        losses = torch.mean(losses, dim=0)
+        return losses
 
     def on_validation_start(self):
         self.loss_fns = [prediction_loss]
@@ -109,9 +123,8 @@ class ICSTrainer(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         self.hidden_states = None
-        losses = self.compute_loss(*batch)
-        losses = torch.cat(losses, dim=1)
-        loss = torch.mean(losses)
+        losses = self._compute_combine_losses(batch)
+        loss = torch.sum(losses)
         self.log("val_loss", loss, prog_bar=True, sync_dist=False, on_step=False, on_epoch=True)
         return loss
 
@@ -132,7 +145,8 @@ class ICSTrainer(LightningModule):
 
     def save_intermediates(self, batch):
         losses = self.compute_loss(*batch)
-
+        for i in range(len(losses)):
+            losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
         losses = torch.cat(losses, dim=1).detach()
         self.states.append(batch[0][:, -1, :].cpu().detach())
         outs = []
@@ -153,17 +167,18 @@ class ICSTrainer(LightningModule):
         return loss
 
     def on_test_end(self):
-        losses = torch.concat(self.losses, dim=0)
-        if self.trainer.gpus != 1:
-            losses = self.all_gather(losses)
-            losses = losses.view(losses.shape[0] * losses.shape[1], -1)
         if not self.skip_test:
+            losses = torch.concat(self.losses, dim=0)
+            if self.trainer.gpus != 1:
+                losses = self.all_gather(losses)
+                losses = losses.view(losses.shape[0] * losses.shape[1], -1)
             if self.n_workers > 0 and self.invariants is not None:
                 combined_outputs, states = self._prep_evaluate_invariants()
                 if self.global_rank == 0:
                     print(f"Evaluating invariants with {self.n_workers} workers", flush=True)
                     losses = losses.cpu()
                     invariant_losses = evaluate_invariants(self.invariants, states, combined_outputs, self.n_workers)
+                    invariant_losses = torch.mean(invariant_losses, dim=1).view(-1, 1)
                     losses = torch.concat([losses, invariant_losses], dim=1)
                     torch.save(losses, self.normal_losses_path)
         else:
@@ -249,18 +264,21 @@ class ICSTrainer(LightningModule):
 
     def on_predict_end(self):
         attacks = torch.concat(self.attacks, dim=0)
+        if self.trainer.gpus != 1:
+            attacks = self.all_gather(attacks)
+            attacks = attacks.view(attacks.shape[0] * attacks.shape[1], -1).cpu()
         if not self.skip_test:
             losses = torch.concat([loss for loss in self.losses], dim=0)
             if self.trainer.gpus != 1:
                 losses = self.all_gather(losses)
                 losses = losses.view(losses.shape[0] * losses.shape[1], -1)
-                attacks = self.all_gather(attacks)
-                attacks = attacks.view(attacks.shape[0] * attacks.shape[1], -1)
+
             if self.invariants is not None:
                 combined_outputs, states = self._prep_evaluate_invariants()
                 if self.global_rank == 0:
                     losses = losses.cpu()
                     invariant_losses = evaluate_invariants(self.invariants, states, combined_outputs, self.n_workers)
+                    invariant_losses = torch.mean(invariant_losses, dim=1).view(-1, 1)
                     losses = torch.concat([losses, invariant_losses], dim=1)
 
             if self.global_rank == 0:
@@ -292,7 +310,7 @@ class ICSTrainer(LightningModule):
         elif self.profile_type == "mean":
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             # alarms = torch.any(scores > 7, dim=1)
-            alarms = torch.max(scores, dim=1).values > 4
+            alarms = torch.max(scores, dim=1).values > 2
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:
                 #     print(torch.max(score))
@@ -334,10 +352,13 @@ class ICSTrainer(LightningModule):
         print(f"Accuracy: {accuracy * 100 :3.2f}")
 
         dwells = []
+        fns = []
         attack = False
         detect = False
         start = 0
         for i in range(len(actual)):
+            if actual[i] and not predicted[i]:
+                fns.append(i)
             if actual[i] and not attack:
                 attack = True
                 start = i
@@ -349,3 +370,5 @@ class ICSTrainer(LightningModule):
         dwell_time = np.mean(dwells)
         print(f"Dwell time: {dwell_time :.2f}")
 
+        with open("fn_ids_physics_informed.json", "w") as fd:
+            json.dump(fns, fd)

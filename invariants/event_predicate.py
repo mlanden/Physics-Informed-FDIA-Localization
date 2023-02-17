@@ -7,8 +7,10 @@ from .predicate import Predicate
 
 class EventPredicate(Predicate):
 
-    def __init__(self, model, target_idx, epsilon, positive_error, continuous_features):
+    def __init__(self, model, target_idx, epsilon, positive_error, min_value, max_value, continuous_features):
         super().__init__()
+        self.max_value = max_value
+        self.min_value = min_value
         self.positive_error = positive_error
         self.continuous_features = continuous_features
         self.target_idx = target_idx
@@ -24,6 +26,7 @@ class EventPredicate(Predicate):
 
     def is_satisfied(self, states: np.ndarray) -> bool:
         state_features = states[:, self.features]
+        state_features = (state_features - self.min_value) / (self.max_value - self.min_value)
         pred = self.model.predict(state_features)
 
         if self.positive_error:
@@ -41,10 +44,7 @@ class EventPredicate(Predicate):
         input_idx = 0
         target = 0
         for i, feature_idx in enumerate(self.continuous_features):
-            if len(input_states.shape) == 3:
-                state_prediction = input_states[:, feature_idx] + continuous_output[:, i]
-            else:
-                state_prediction = input_states[:, feature_idx] + continuous_output[:, i]
+            state_prediction = input_states[:, feature_idx] + continuous_output[:, i]
 
             if feature_idx != self.target_idx:
                 input_[:, input_idx] = state_prediction
@@ -52,6 +52,7 @@ class EventPredicate(Predicate):
             else:
                 target = state_prediction.view(-1, 1)
 
+        input_ = (input_ - self.min_value) / (self.max_value - self.min_value)
         predicted = self.linear_model(input_)
         confidence = torch.transpose(torch.abs(target - predicted), 0, 1)
         return confidence

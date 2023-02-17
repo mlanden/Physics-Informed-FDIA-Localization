@@ -112,7 +112,7 @@ def test():
     type_ = conf["train"]["type"]
     if type_ == "prediction":
         trainer = Trainer(default_root_dir=checkpoint_dir,
-                          devices=2,
+                          devices=gpus,
                           accelerator="gpu" if torch.cuda.is_available() else "cpu",
                           )
         model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
@@ -172,7 +172,7 @@ if __name__ == '__main__':
     checkpoint = conf["train"]["checkpoint"]
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}-v1.ckpt")  # "last.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}-v2.ckpt")  # "last.ckpt")
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -202,15 +202,15 @@ if __name__ == '__main__':
     elif task == "test":
         test()
     elif task == "predicates":
-        dataset = SWATDataset(conf, conf["data"]["normal"],
+        dataset = SWATDataset(conf, conf["data"]["invariants"],
                               window_size=1,
-                              train=True,
+                              train=False,
                               load_scaler=False)
         predicates = generate_predicates(dataset, conf)
     elif task == "invariants":
-        dataset = SWATDataset(conf, conf["data"]["normal"],
+        dataset = SWATDataset(conf, conf["data"]["invariants"],
                               window_size=1,
-                              train=True,
+                              train=False,
                               load_scaler=False)
         miner = InvariantMiner(conf, dataset)
         miner.mine_invariants()

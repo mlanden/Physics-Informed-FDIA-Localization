@@ -29,12 +29,12 @@ def generate_predicates(dataset: ICSDataset, conf: dict) -> List[Predicate]:
         print(f"Categorical predicates: {len(predicates)}")
 
         event_predicates = _generate_event_predicates(dataset, conf)
+        print(f"Event predicates: {len(event_predicates)}")
         predicates.extend(event_predicates)
         distribution_predicates = _generate_distribution_predicates(dataset, conf)
         predicates.extend(distribution_predicates)
 
         print(f"Distribution predicates: {len(distribution_predicates)}")
-        print(f"Event predicates: {len(event_predicates)}")
         print(f"Generated {len(predicates)} predicates. Saved to {checkpoint}")
 
         with open(checkpoint, "wb") as fd:
@@ -44,7 +44,7 @@ def generate_predicates(dataset: ICSDataset, conf: dict) -> List[Predicate]:
 
 
 def _generate_distribution_predicates(dataset: ICSDataset, conf: dict) -> List[Predicate]:
-    features, labels = dataset.get_data()
+    features = get_data(dataset, conf)
     categorical_values = dataset.get_categorical_features()
     deltas = features[1:, ...] - features[:-1, ...]
 
@@ -82,20 +82,35 @@ def _generate_distribution_predicates(dataset: ICSDataset, conf: dict) -> List[P
     return predicates
 
 
+def get_data(dataset, conf):
+    features, labels = dataset.get_data()
+    invariant_fraction = conf["train"]["invariant_fraction"]
+    dataset_size = int(len(features) * invariant_fraction)
+    # features = features[:dataset_size, :]
+    return features
+
+
 def _generate_event_predicates(dataset: ICSDataset, conf: dict) -> List[Predicate]:
     epsilon = conf["train"]["event_predicate_error"]
-    features, labels = dataset.get_data()
+    features = get_data(dataset, conf)
     pre_states = features[:-1, :]
     categorical_values = dataset.get_categorical_features()
     continuous_features = set(range(features.shape[-1])) - set(categorical_values.keys())
     predicates = []
+    min_values = []
+    max_values = []
+    for i in continuous_features:
+        vals = features[:, i]
+        min_values.append(vals.min())
+        max_values.append(vals.max())
+        features[:, i] = (features[:, i] - min_values[-1]) / (max_values[-1] - min_values[-1])
 
     for actuator in categorical_values:
         pre_value = features[:-1, actuator]
         post_state = features[1:, actuator]
 
         changes = np.argwhere(pre_value != post_state)
-        events = {(pre_value[i].item(), post_state[i].item()) for i in changes}
+        events = set([(pre_value[i].item(), post_state[i].item()) for i in changes])
         for event in events:
             states = pre_states[(pre_value == event[0]) & (post_state == event[1]), :]
             for target_feature in continuous_features:
@@ -104,18 +119,19 @@ def _generate_event_predicates(dataset: ICSDataset, conf: dict) -> List[Predicat
 
                 x = states[:, active_features]
                 y = states[:, target_feature]
-
                 if len(y) > 5:
-                    model = Lasso()
+                    model = Lasso(alpha=1)
                     model.fit(x, y)
 
                     y_pred = model.predict(x)
                     error = np.abs(y - y_pred)
-                    if np.max(error) < epsilon:
-                        plus_predicate = EventPredicate(model, target_feature, epsilon, True,
-                                                        list(continuous_features))
+                    max_error = np.max(error)
+                    if max_error < epsilon:
+                        max_error *= 1.1
+                        plus_predicate = EventPredicate(model, target_feature, max_error, True,
+                                                        min_values, max_values, list(continuous_features))
                         predicates.append(plus_predicate)
-                        neg_predicate = EventPredicate(model, target_feature, epsilon, False,
-                                                       list(continuous_features))
+                        neg_predicate = EventPredicate(model, target_feature, max_error, False,
+                                                       min_values, max_values, list(continuous_features))
                         predicates.append(neg_predicate)
     return predicates
