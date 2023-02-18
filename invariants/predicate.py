@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 from abc import ABC, abstractmethod
 import torch
 import numpy as np
@@ -10,13 +10,16 @@ class Predicate(ABC):
         self.hash = None
 
     @abstractmethod
-    def is_satisfied(self, states: np.ndarray) -> np.ndarray:
+    def is_satisfied(self, states, network_outputs=None) -> Union[np.ndarray, torch.Tensor]:
         """ Return whether the predicate is satisfied in a state
 
         Parameters
         ---------
         states: Tensor
         The state of the system to test
+
+        network_outputs: list[torch.Tensor]
+        The predicted state of the system
         """
         pass
 

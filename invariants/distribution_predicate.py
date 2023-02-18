@@ -18,13 +18,24 @@ class DistributionPredicate(Predicate):
         self.state_idx = state_idx
         self.distribution_idx = distribution_idx
 
-    def is_satisfied(self, states: np.ndarray) -> np.ndarray:
-        states = np.asarray(states)
-        states = states[:, self.state_idx].reshape(-1, 1)
-        diffs = states[1:] - states[:-1]
-        score = self.model.score_samples(diffs)
-        cluster = self.model.predict(diffs)
-        return np.hstack((False, np.logical_and(score >= self.threshold, cluster == self.distribution_idx)))
+    def is_satisfied(self, states, network_outputs=None):
+        if network_outputs is None:
+            states = np.asarray(states)
+            states = states[:, self.state_idx].reshape(-1, 1)
+            diffs = states[1:] - states[:-1]
+            score = self.model.score_samples(diffs)
+            cluster = self.model.predict(diffs)
+            return np.hstack((False, np.logical_and(score >= self.threshold, cluster == self.distribution_idx)))
+        else:
+            continuous_outputs = network_outputs[0]
+            diffs = continuous_outputs[:, self.continuous_idx]
+            log_probs = torch.zeros((continuous_outputs.shape[0], len(self.distributions)), device=states.device)
+            for i in range(len(self.distributions)):
+                log_probs[:, i] = self.distributions[i].log_prob(diffs)
+            max_info = torch.max(log_probs, dim=1)
+            clusters = max_info.indices
+            scores = max_info.values
+            return torch.logical_and(scores >= self.threshold, clusters == self.distribution_idx)
 
     def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         continuous_outputs = network_outputs[0]

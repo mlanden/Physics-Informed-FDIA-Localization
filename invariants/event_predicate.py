@@ -22,16 +22,22 @@ class EventPredicate(Predicate):
         self.features = list(continuous_features)
         self.features.remove(target_idx)
 
-    def is_satisfied(self, states: np.ndarray) -> bool:
-        state_features = states[:, self.features]
-        pred = self.model.predict(state_features)
+    def is_satisfied(self, states, network_outputs=None) -> bool:
+        if network_outputs is None:
+            state_features = states[:, self.features]
 
-        if self.positive_error:
-            pred += self.epsilon
-            return states[:, self.target_idx] < pred
+            pred = self.model.predict(state_features)
+
+            if self.positive_error:
+                pred += self.epsilon
+                return states[:, self.target_idx] < pred
+            else:
+                pred -= self.epsilon
+                return states[:, self.target_idx] > pred
         else:
-            pred -= self.epsilon
-            return states[:, self.target_idx] > pred
+            confidence = self.confidence(states, network_outputs)
+            # print(confidence < self.epsilon)
+            return confidence < self.epsilon
 
     def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         self.linear_model.to(input_states.device)

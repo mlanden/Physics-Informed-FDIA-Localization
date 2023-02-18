@@ -77,7 +77,7 @@ class InvariantMiner:
         # self.predicates = predicates
         self._add_rules()
         print(f"Invalid invariants: {self.invalid_invariants}")
-        # self.evaluate(score=False)
+        self.evaluate(score=False)
 
         print(f"Saved {len(self.invariants)} invariants")
         with open(self.invariants_path, "wb") as fd:

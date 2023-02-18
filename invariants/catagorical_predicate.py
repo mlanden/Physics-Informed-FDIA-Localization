@@ -15,24 +15,15 @@ class CategoricalPredicate(Predicate):
 
         self.loss = torch.nn.CrossEntropyLoss(reduction="none")
 
-    def is_satisfied(self, states: np.ndarray) -> bool:
-        """ Determine whether a state of the system has a categorical variable set to the target class
-
-        Parameters
-        -----------
-        states : Tensor
-        The complete system state
-        """
-        return states[:, self.idx] == self.class_value
+    def is_satisfied(self, states, network_outputs=None) -> bool:
+        if network_outputs is None:
+            return states[:, self.idx] == self.class_value
+        else:
+            categorical_output = network_outputs[self.categorical_idx + 1]
+            class_id = torch.max(categorical_output, dim=1).indices
+            return class_id == self.class_value
 
     def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
-        """ Returns the cross entropy between the given class logits and the target class
-
-        Parameters
-        -----------
-        network_outputs: list[Tensor]
-        A list of logit outputs for each categorical variable in the system
-        """
         categorical_output = network_outputs[self.categorical_idx + 1]
 
         target = torch.full((categorical_output.shape[0], ), self.class_value, device=categorical_output.device)

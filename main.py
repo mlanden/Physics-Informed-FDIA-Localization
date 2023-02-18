@@ -172,7 +172,7 @@ if __name__ == '__main__':
     checkpoint = conf["train"]["checkpoint"]
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}-v1.ckpt")  # "last.ckpt")
+    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}-v1.ckpt")  # s
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)

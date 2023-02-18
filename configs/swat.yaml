@@ -1,4 +1,4 @@
-#task: train
+task: train
 #task: error
 task: test
 #task: "hyperparameter_optimize"
@@ -11,8 +11,8 @@ data:
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWAT_NDSS_Normal.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
 #  attack: ../data/SWAT/SWaT_Dataset_Attack_v0.csv
-#  attack: ../data/SWAT/SWaT_Dataset_Attack_modified.csv
-  attack: ../data/SWAT/SWAT_NDSS_Attack.csv
+  attack: ../data/SWAT/SWaT_Dataset_Attack_modified.csv
+#  attack: ../data/SWAT/SWAT_NDSS_Attack.csv
 #  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
   n_features: 51
 
@@ -27,7 +27,7 @@ model:
 #  profile_type: gmm
 
 train:
-  n_workers: 1
+  n_workers: 3
   gpus: 4
   nodes: 1
   batch_size: 64
@@ -35,30 +35,30 @@ train:
   lr: 0.1
   regularization: 0.0001
   num_samples: 2
-  checkpoint: swat_schedule
+  checkpoint: swat_benchmark
 #  checkpoint: swat_prediction
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
-  load_checkpoint: 0
+  load_checkpoint: 1
 
   tensorboard: 1
   train_fraction: 0.3
 #  train_fraction: 0.8
   invariant_fraction: 0.2
   validate_fraction: 0.1
-  find_error_fraction: 0.004
+  find_error_fraction: 0.4
 #  validation_frequency: 1
   loss: invariant
   max_gmm_components: 5
   distribution_threshold: 1.2
-  event_predicate_error: 0.0001
+  event_predicate_error: 0.01
   gamma: 0.9
 #  gamma: 0.7
-  theta: 0.1
-#  theta: 0.08
+#  theta: 0.1
+  theta: 0.08
   max_depth: 2
   min_confidence: 0.8
   type: invariants
   type: prediction
-  invariants: swat_reduced
-#  invariants: swat_benchmark
+#  invariants: swat_reduced
+  invariants: swat_benchmark
