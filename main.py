@@ -112,7 +112,7 @@ def test():
     type_ = conf["train"]["type"]
     if type_ == "prediction":
         trainer = Trainer(default_root_dir=checkpoint_dir,
-                          devices=2,
+                          devices=gpus,
                           accelerator="gpu" if torch.cuda.is_available() else "cpu",
                           )
         model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)

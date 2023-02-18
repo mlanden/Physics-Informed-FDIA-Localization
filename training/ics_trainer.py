@@ -61,9 +61,17 @@ class ICSTrainer(LightningModule):
         if self.loss == "invariant":
             with open(self.invariants_path, "rb") as fd:
                 self.invariants = pickle.load(fd)
+            anteceds = []
+            consequents = []
+            for i in self.invariants:
+                anteceds.append(len(i.antecedent))
+                consequents.append(len(i.consequent))
+            print("Mean antecedent:", np.mean(anteceds))
+            print("Mean consequent:", np.mean(consequents))
 
         self.losses = []
         self.states = []
+        self.batch_ids = []
         self.outputs = []
         self.attacks = []
         self.eval_scores = []

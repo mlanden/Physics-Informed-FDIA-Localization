@@ -64,17 +64,20 @@ class InvariantMiner:
 
     def mine_invariants(self):
         self.invariants = []
-        # predicates = self.predicates
-        #
-        # # Mode 1
-        # self.predicates = []
-        # for p in predicates:
-        #     if type(p) is DistributionPredicate:
-        #         self.predicates.append(p)
-        # self._add_rules()
+        predicates = self.predicates
+
+        # Mode 1
+        self.predicates = []
+        for p in predicates:
+            if type(p) is DistributionPredicate:
+                self.predicates.append(p)
+        self._add_rules()
 
         # Mode 2
-        # self.predicates = predicates
+        self.predicates = []
+        for p in predicates:
+            if type(p) is not DistributionPredicate:
+                self.predicates.append(p)
         self._add_rules()
         print(f"Invalid invariants: {self.invalid_invariants}")
         self.evaluate(score=False)
@@ -85,8 +88,9 @@ class InvariantMiner:
 
     def _add_rules(self):
         self.features, labels = self.dataset.get_data()
+        print(self.features.shape)
         self.dataset_size = int(len(self.features) * self.invariant_fraction)
-        self.features = self.features[:self.dataset_size, :]
+        # self.features = self.features[:self.dataset_size, :]
         print(f"Using {len(self.predicates)} predicates")
         if path.exists(self.assign_path) and self.load_checkpoint:
             with open(self.assign_path, "rb") as fd:

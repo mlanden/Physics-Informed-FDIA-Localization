@@ -9,8 +9,8 @@ if __name__ == '__main__':
     print(os.getcwd())
     # files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean", "updated", "fp_reduce"]
     # names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant", "Updated Labels", "Reduced Invariants"]
-    files = ["prediction", "fp_reduce", "gmm"]
-    names = ["LSTM Prediction", "Reduced Invariants", "GMM"]
+    files = ["prediction", "fp_reduce", "schedule"]
+    names = ["LSTM Prediction", "Reduced Invariants", "Schedule"]
     fig = plt.figure()
     for i in range(len(files)):
         with open(f"evaluation_losses_{files[i]}.json", "r") as fd:
@@ -28,9 +28,9 @@ if __name__ == '__main__':
         print()
         print(names[i])
         for i in range(len(tpr)):
-            if .70 < tpr[i] < .75:
+            if .66 < tpr[i] < .75:
                 print(f"{i}, {tpr[i]:0.2f}, {fpr[i]:0.2f}, {thresholds[i]:.2f}")
-        print(tpr.tolist())
+        # print(tpr.tolist())
         # print(thresholds.tolist())
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
