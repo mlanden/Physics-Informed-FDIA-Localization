@@ -2,6 +2,7 @@ import torch
 from typing import FrozenSet, List
 from .predicate import Predicate
 
+eps = torch.finfo(torch.float32).eps
 
 class Invariant:
     def __init__(self, antecedent: FrozenSet[Predicate], consequent: FrozenSet[Predicate], support: int,
@@ -27,16 +28,22 @@ class Invariant:
     def confidence(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         if len(input_states.shape) == 3:
             input_states = input_states[:, -1, :]
-        product = torch.ones((1, network_outputs[0].shape[0]), device=input_states.device)
+        antecedent_loss = torch.zeros((1, network_outputs[0].shape[0]), device=input_states.device)
         for predicate in self.antecedent_objs:
             confidence = predicate.confidence(input_states, network_outputs)
-            product *= confidence
+            antecedent_loss += confidence
 
+        consequent_loss = torch.zeros_like(antecedent_loss, device=input_states.device)
         for predicate in self.consequent_objs:
             confidence = predicate.confidence(input_states, network_outputs)
-            product *= confidence
-        assert product.shape[0] == 1
-        return product
+            consequent_loss += confidence
+
+        loss = consequent_loss / (antecedent_loss + eps)
+        if torch.max(loss) > 1e6:
+            print(antecedent_loss, consequent_loss)
+
+        assert loss.shape[0] == 1
+        return loss
 
     def _convert_predicates(self):
         for p in self.antecedent:

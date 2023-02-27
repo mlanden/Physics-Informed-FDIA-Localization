@@ -13,7 +13,7 @@ from pytorch_lightning.loggers import TensorBoardLogger
 
 from datasets import SWATDataset
 from training import ICSTrainer
-from utils import make_roc_curve
+from analysis import investigate_invariants
 from invariants import generate_predicates, InvariantMiner
 
 
@@ -172,7 +172,7 @@ if __name__ == '__main__':
     checkpoint = conf["train"]["checkpoint"]
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}-v1.ckpt")  # s
+    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}.ckpt")  # s
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -214,8 +214,17 @@ if __name__ == '__main__':
                               load_scaler=False)
         miner = InvariantMiner(conf, dataset)
         miner.mine_invariants()
-    elif task == "roc":
-        losses_path = path.join(checkpoint_dir, "evaluation_losses.json")
-        make_roc_curve(losses_path)
+    elif task == "analyze":
+        dataset = SWATDataset(conf, conf["data"]["attack"],
+                              window_size=1,
+                              train=False,
+                              load_scaler=True)
+        type_ = conf["train"]["type"]
+        trainer = Trainer(default_root_dir=checkpoint_dir,
+                          devices=gpus,
+                          accelerator="gpu" if torch.cuda.is_available() else "cpu",
+                          )
+        model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
+        investigate_invariants(conf, checkpoint_dir, dataset, model)
     else:
         raise RuntimeError(f"Unknown task: {task}")

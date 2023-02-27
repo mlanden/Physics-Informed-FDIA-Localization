@@ -1,9 +1,10 @@
-task: train
+#task: train
 #task: error
 task: test
-#task: "hyperparameter_optimize"
+ #task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
+#task: analyze
 data:
 #  normal: ../data/SWAT/SWAT_NDSS_Normal.csv
   normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
@@ -35,7 +36,7 @@ train:
   lr: 0.1
   regularization: 0.0001
   num_samples: 2
-  checkpoint: swat_benchmark
+  checkpoint: swat_loss
 #  checkpoint: swat_prediction
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
@@ -60,5 +61,5 @@ train:
   min_confidence: 0.8
   type: invariants
   type: prediction
-#  invariants: swat_reduced
-  invariants: swat_benchmark
+  invariants: swat_reduced
+#  invariants: swat_benchmark

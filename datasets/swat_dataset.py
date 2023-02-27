@@ -4,7 +4,7 @@ import joblib
 from os import path
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler
+from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from .ics_dataset import ICSDataset
 
@@ -34,7 +34,7 @@ class SWATDataset(ICSDataset):
         if load_scaler and path.exists(scale_file):
             self.scaler = joblib.load(scale_file)
         else:
-            self.scaler = StandardScaler()
+            self.scaler = MinMaxScaler()
             self.scaler.fit(self.features)
             if path.exists(path.basename(scale_file)):
                 joblib.dump(self.scaler, scale_file)

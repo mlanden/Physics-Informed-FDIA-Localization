@@ -59,7 +59,7 @@ class EventPredicate(Predicate):
                 target = state_prediction.view(-1, 1)
 
         predicted = self.linear_model(input_)
-        confidence = torch.transpose(torch.abs(target - predicted), 0, 1)
+        confidence = torch.transpose(torch.abs(target - predicted) / target, 0, 1)
         return confidence
 
     def __hash__(self):

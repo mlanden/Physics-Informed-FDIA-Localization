@@ -49,7 +49,9 @@ class DistributionPredicate(Predicate):
         log_prob = self.distributions[self.distribution_idx].log_prob(continuous_outputs[:, self.continuous_idx])
         log_prob = log_prob.view(1, -1)
         total = total.view(1, -1)
-        confidence = torch.div(self.weights[self.distribution_idx] * log_prob, total)
+        scores = torch.div(self.weights[self.distribution_idx] * log_prob, total)
+        confidence = torch.nn.functional.relu(self.threshold - scores)
+        confidence = torch.sigmoid(confidence)
         return confidence
 
     def __hash__(self):
