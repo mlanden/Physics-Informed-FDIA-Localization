@@ -9,8 +9,8 @@ if __name__ == '__main__':
     print(os.getcwd())
     # files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean", "updated", "fp_reduce"]
     # names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant", "Updated Labels", "Reduced Invariants"]
-    files = ["prediction", "fp_reduce", "schedule", "new_loss"]
-    names = ["LSTM Prediction", "Reduced Invariants", "Schedule" , "Sum Loss"]
+    files = ["fp_reduce", "new_loss", "mean"]
+    names = ["Reduced Invariants", "Sum Loss", "Mean losses"]
     fig = plt.figure()
     for i in range(len(files)):
         with open(f"evaluation_losses_{files[i]}.json", "r") as fd:

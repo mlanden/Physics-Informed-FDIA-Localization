@@ -28,8 +28,9 @@ def train(config=None):
             filename="checkpoint",
             on="validation_end"
         ))
-        conf["train"]["lr"] = config["lr"]
-        conf["train"]["batch_size"] = config["batch_size"]
+        conf["model"]["hidden_layers"] = [config["l1"], config["l2"]]
+        conf["model"]["sequence_length"] = config["sequence_len"]
+        conf["model"]["window_size"] = config["sequence_len"] - 2
     else:
         callbacks.append(ModelCheckpoint(dirpath=checkpoint_dir,
                                          filename=checkpoint,
@@ -52,7 +53,7 @@ def train(config=None):
                       strategy=DDPPlugin(find_unused_parameters=False),
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       callbacks=callbacks,
-                      # limit_train_batches=30
+                      # limit_train_batches=3
                       # track_grad_norm=2,
                       # gradient_clip_val=0.1
                       )
@@ -64,7 +65,7 @@ def train(config=None):
     datalen = len(dataset)
     invariant_len = int(datalen * invariant_fraction)
     train_len = int(datalen * train_fraction)
-    train_idx = list(range(invariant_len, train_len))
+    train_idx = list(range(invariant_len, train_len + invariant_len))
     train_data = Subset(dataset, train_idx)
     val_len = int(datalen * validate_fraction)
     val_idx = list(range(invariant_len + train_len, invariant_len + train_len + val_len))
@@ -132,20 +133,25 @@ def hyperparameter_optimize():
 
     conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
     conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
+    conf["train"]["epochs"] = 20
 
     config = {
-        "lr": tune.loguniform(1e-4, 1e-1),
-        "batch_size": tune.choice([32, 64, 128])
+        # "lr": tune.loguniform(1e-4, 1e-1),
+        # "batch_size": tune.choice([32, 64, 128])
+        "l1": tune.choice([20 * i for i in range(1, 6)]),
+        "l2": tune.choice([20 * i for i in range(1, 6)]),
+        "sequence_len": tune.choice([2 * i for i in range(2, 15)])
     }
 
     scheduler = ASHAScheduler(max_t=conf["train"]["epochs"],
                               grace_period=1,
                               reduction_factor=2)
-    reporter = CLIReporter(parameter_columns=["lr", "batch_size"],
+    reporter = CLIReporter(parameter_columns=["l1", "l2", "sequence_len"],
                            metric_columns=["loss", "training_iterations"])
 
-    resources = {"cpu": 1, "gpu": 0.5}
-
+    resources = {"gpu": 2}
+    global gpus
+    gpus = 1
     tuner = tune.Tuner(
         tune.with_resources(train,
                             resources=resources),

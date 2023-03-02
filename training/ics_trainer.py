@@ -96,6 +96,7 @@ class ICSTrainer(LightningModule):
         }
 
     def training_step(self, batch, batch_idx):
+        print(batch_idx, flush=True)
         self.hidden_states = None
         losses = self._compute_combine_losses(batch)
 
@@ -110,10 +111,7 @@ class ICSTrainer(LightningModule):
     def _compute_combine_losses(self, batch):
         losses = self.compute_loss(*batch)
         for i in range(len(losses)):
-            # print(losses[i].max(dim=1))
             losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
-            # print(losses[i])
-        # print(losses)
         losses = torch.cat(losses, dim=1)
         losses = torch.mean(losses, dim=0)
         return losses
@@ -149,8 +147,8 @@ class ICSTrainer(LightningModule):
 
     def save_intermediates(self, batch):
         losses = self.compute_loss(*batch)
-        # for i in range(len(losses)):
-        #     losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
+        for i in range(len(losses)):
+            losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
         losses = torch.cat(losses, dim=1).detach()
         self.states.append(batch[0][:, -1, :].cpu().detach())
         outs = []
@@ -247,6 +245,7 @@ class ICSTrainer(LightningModule):
         elif self.profile_type == "mean":
             obj = torch.load(self.normal_mean_path)
             self.normal_means = obj["mean"]
+            print(self.normal_means)
             self.normal_stds = obj["std"]
 
         if path.exists(self.losses_path) and self.load_checkpoint:
@@ -314,7 +313,7 @@ class ICSTrainer(LightningModule):
         elif self.profile_type == "mean":
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             # alarms = torch.any(scores > 7, dim=1)
-            alarms = torch.max(scores, dim=1).values > 5.5
+            alarms = torch.max(scores, dim=1).values > 1.85
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:
                 #     print(torch.max(score))
