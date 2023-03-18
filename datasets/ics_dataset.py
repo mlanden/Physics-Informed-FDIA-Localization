@@ -12,6 +12,10 @@ class ICSDataset(ABC, Dataset):
         pass
 
     @abstractmethod
+    def get_continuous_features(self):
+        pass
+
+    @abstractmethod
     def get_data(self) -> Tuple[np.ndarray, np.ndarray]:
         pass
 

@@ -37,7 +37,7 @@ class DistributionPredicate(Predicate):
             scores = max_info.values
             return torch.logical_and(scores >= self.threshold, clusters == self.distribution_idx)
 
-    def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
+    def confidence_loss(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         continuous_outputs = network_outputs[0]
         if len(continuous_outputs.shape) == 1:
             continuous_outputs = continuous_outputs.view(1, -1)

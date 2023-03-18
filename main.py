@@ -15,7 +15,7 @@ from datasets import SWATDataset
 from training import ICSTrainer
 from analysis import investigate_invariants
 from invariants import generate_predicates, InvariantMiner
-
+from equations import build_equations
 
 def train(config=None):
     callbacks = [RichProgressBar(leave=True), LearningRateMonitor("epoch")]
@@ -73,7 +73,7 @@ def train(config=None):
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
     val_loader = DataLoader(validation_data, batch_size=batch_size, shuffle=False, drop_last=False)
-    model = ICSTrainer(conf, dataset.get_categorical_features())
+    model = ICSTrainer(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
     if load_checkpoint and path.exists(checkpoint_to_load):
         trainer.fit(model, train_loader, val_loader,
                     ckpt_path=checkpoint_to_load)
@@ -232,5 +232,15 @@ if __name__ == '__main__':
                           )
         model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
         investigate_invariants(conf, checkpoint_dir, dataset, model)
+    elif task == "equations":
+        dataset = SWATDataset(conf, conf["data"]["normal"],
+                              window_size=1,
+                              train=True,
+                              load_scaler=False)
+        equations = build_equations("swat", dataset.get_continuous_features())
+        for unscaled_seq, scaled_seq, target in dataset:
+            value = equations[0].evaluate(unscaled_seq)
+            print(value)
+
     else:
         raise RuntimeError(f"Unknown task: {task}")

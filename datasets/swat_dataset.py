@@ -75,3 +75,9 @@ class SWATDataset(ICSDataset):
         categorical_values = {2: 3, 3: 2, 4: 2, 9: 3, 10: 2, 11: 2, 12: 2, 13: 2, 14: 2, 15: 2, 19: 3, 20: 3, 21: 3,
                               22: 3, 23: 2, 24: 2, 29: 2, 30: 2, 31: 2, 32: 2, 33: 3, 42: 2, 43: 2, 48: 2, 49: 2, 50: 2}
         return categorical_values
+
+    def get_continuous_features(self):
+        features = set(range(51))
+        categorical_features = self.get_categorical_features()
+        continuous_features = list(features - set(categorical_features.keys()))
+        return continuous_features

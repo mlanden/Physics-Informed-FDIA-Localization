@@ -25,17 +25,17 @@ class Invariant:
                 return False
         return True
 
-    def confidence(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
+    def confidence_loss(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         if len(input_states.shape) == 3:
             input_states = input_states[:, -1, :]
         antecedent_loss = torch.zeros((1, network_outputs[0].shape[0]), device=input_states.device)
         for predicate in self.antecedent_objs:
-            confidence = predicate.confidence(input_states, network_outputs)
+            confidence = predicate.confidence_loss(input_states, network_outputs)
             antecedent_loss += confidence
 
         consequent_loss = torch.zeros_like(antecedent_loss, device=input_states.device)
         for predicate in self.consequent_objs:
-            confidence = predicate.confidence(input_states, network_outputs)
+            confidence = predicate.confidence_loss(input_states, network_outputs)
             consequent_loss += confidence
 
         loss = consequent_loss / (antecedent_loss + eps)

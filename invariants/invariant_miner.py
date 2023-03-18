@@ -506,7 +506,7 @@ def _invariant_worker(rank: int, invariants: List[Invariant], states: torch.Tens
         try:
             inv_id = tasks.get(timeout=0.1)
             invariant = invariants[inv_id]
-            confidence = invariant.confidence(states, outputs)
+            confidence = invariant.confidence_loss(states, outputs)
             results.put((inv_id, confidence))
             tasks.task_done()
         except queue.Empty:

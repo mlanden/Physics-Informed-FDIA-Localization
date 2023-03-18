@@ -13,14 +13,15 @@ import torch
 from pytorch_lightning import LightningModule
 from torch import optim
 
-from models import PredictionModel, invariant_loss, prediction_loss
+from models import PredictionModel, invariant_loss, prediction_loss, equation_loss
 from invariants import evaluate_invariants
+from equations import build_equations
 eps = torch.finfo(torch.float32).eps
 
 
 class ICSTrainer(LightningModule):
 
-    def __init__(self, conf, categorical_values):
+    def __init__(self, conf, categorical_values, continuous_values):
         super(ICSTrainer, self).__init__()
         self.save_hyperparameters()
         self.conf = conf
@@ -50,6 +51,7 @@ class ICSTrainer(LightningModule):
         self.hidden_states = None
         self.recent_outputs = None
         self.invariants = None
+        self.equations = None
         self.normal_model = None
         self.normal_means = None
         self.normal_stds = None
@@ -68,6 +70,8 @@ class ICSTrainer(LightningModule):
                 consequents.append(len(i.consequent))
             print("Mean antecedent:", np.mean(anteceds))
             print("Mean consequent:", np.mean(consequents))
+        elif self.loss == "equation":
+            self.equations = build_equations(conf["train"]["equation_name"], continuous_values)
 
         self.losses = []
         self.states = []
@@ -122,6 +126,9 @@ class ICSTrainer(LightningModule):
         if self.invariants is not None:
             self.loss_fns.append(partial(invariant_loss, invariants=self.invariants))
             self.loss_names.append("Invariant")
+        if self.equations is not None:
+            self.loss_fns.append(partial(equation_loss, equations=self.equations))
+            self.loss_names.append("Equation")
 
     def validation_step(self, batch, batch_idx):
         self.hidden_states = None

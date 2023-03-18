@@ -23,7 +23,7 @@ class CategoricalPredicate(Predicate):
             class_id = torch.max(categorical_output, dim=1).indices
             return class_id == self.class_value
 
-    def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
+    def confidence_loss(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         categorical_output = network_outputs[self.categorical_idx + 1]
 
         target = torch.full((categorical_output.shape[0], ), self.class_value, device=categorical_output.device)

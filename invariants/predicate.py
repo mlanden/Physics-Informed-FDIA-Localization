@@ -24,7 +24,7 @@ class Predicate(ABC):
         pass
 
     @abstractmethod
-    def confidence(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
+    def confidence_loss(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         """Returns the confidence that a state satisfies the predicate 
         
         Parameters

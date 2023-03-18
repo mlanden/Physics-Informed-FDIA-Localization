@@ -35,11 +35,11 @@ class EventPredicate(Predicate):
                 pred -= self.epsilon
                 return states[:, self.target_idx] > pred
         else:
-            confidence = self.confidence(states, network_outputs)
+            confidence = self.confidence_loss(states, network_outputs)
             # print(confidence < self.epsilon)
             return confidence < self.epsilon
 
-    def confidence(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
+    def confidence_loss(self, input_states, network_outputs: List[torch.Tensor]) -> torch.Tensor:
         self.linear_model.to(input_states.device)
 
         continuous_output = network_outputs[0]

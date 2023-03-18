@@ -4,11 +4,12 @@ import torch.nn as nn
 from functools import partial
 
 from invariants import Invariant
+from equations import Equation
 from datasets import ICSDataset, SWATDataset
 
 
-def prediction_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torch.Tensor, categorical_values: dict) -> Union[
-    Tuple[torch.Tensor, Tuple], torch.Tensor]:
+def prediction_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torch.Tensor, categorical_values: dict) ->\
+    torch.Tensor:
     losses = torch.zeros((batch.shape[0], batch.shape[-1]))
     continuous_idx = 0
     classification_idx = 0
@@ -36,12 +37,11 @@ def prediction_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: to
 
 
 def invariant_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torch.Tensor, categorical_values: dict,
-                   invariants: List[Invariant]=None) -> Union[
-    Tuple[torch.Tensor, Tuple], torch.Tensor]:
+                   invariants: List[Invariant]=None) -> torch.Tensor:
 
     loss = torch.zeros((len(invariants), batch.shape[0]))
     for i, invariant in enumerate(invariants):
-        confidence = invariant.confidence(batch, outputs)
+        confidence = invariant.confidence_loss(batch, outputs)
         # print(confidence, invariant.support)
 
         loss[i, :] = confidence #* invariant.support
@@ -49,3 +49,13 @@ def invariant_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: tor
     loss = torch.t(loss)
     return loss
 
+
+def equation_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torch.Tensor, categorical_values: dict,
+                  equations: List[Equation]) -> torch.Tensor:
+    loss = torch.zeros((len(equations), batch.shape[0]))
+    for i, equation in enumerate(equations):
+        confidence_loss = equation.confidence_loss(batch, outputs)
+        loss[i, :] = confidence_loss
+    loss = torch.t(loss)
+    print(loss)
+    return loss
