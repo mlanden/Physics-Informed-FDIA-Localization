@@ -57,5 +57,4 @@ def equation_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torc
         confidence_loss = equation.confidence_loss(batch, outputs)
         loss[i, :] = confidence_loss
     loss = torch.t(loss)
-    print(loss)
     return loss

@@ -1,11 +1,11 @@
-task: train
+#task: train
 #task: error
-#task: test
+task: test
 #task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 #task: analyze
-task: equations
+#task: equations
 data:
 #  normal: ../data/SWAT/SWAT_NDSS_Normal.csv
   normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
@@ -23,25 +23,26 @@ model:
 #  hidden_layers: [100, 100]
   activation: leakyRelu
   embedding_size: 10
-  sequence_length: 10
-  window_size: 8
+  sequence_length: 60
+  window_size: 30
   profile_type: mean
 #  profile_type: gmm
 
 train:
-  n_workers: 3
-  gpus: 1
+  n_workers: 0
+  gpus: 4
   nodes: 1
-  batch_size: 4
+  batch_size: 64
   epochs: 500
   lr: 0.1
+  scale: [10, 0.1]
   regularization: 0.0001
   num_samples: 20
-  checkpoint: swat_loss
+  checkpoint: swat_equ
 #  checkpoint: swat_prediction
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
-  load_checkpoint: 0
+  load_checkpoint: 1
 
   tensorboard: 1
   train_fraction: 0.3

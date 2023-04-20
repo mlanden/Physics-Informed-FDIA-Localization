@@ -8,7 +8,7 @@ from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, Learni
 from pytorch_lightning.plugins import DDPPlugin
 from torch.utils.data import Subset, DataLoader
 import torch.multiprocessing as mp
-
+import numpy as np
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from datasets import SWATDataset
@@ -237,10 +237,13 @@ if __name__ == '__main__':
                               window_size=1,
                               train=True,
                               load_scaler=False)
-        equations = build_equations("swat", dataset.get_continuous_features())
+        equations = build_equations("swat", dataset.get_categorical_features(), dataset.get_continuous_features())
+        values = []
         for unscaled_seq, scaled_seq, target in dataset:
             value = equations[0].evaluate(unscaled_seq)
+            values.append(value)
             print(value)
+        print("Mean:", np.mean(values))
 
     else:
         raise RuntimeError(f"Unknown task: {task}")

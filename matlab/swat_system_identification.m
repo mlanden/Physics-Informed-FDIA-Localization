@@ -1,6 +1,6 @@
 swat = readtable("C:\Users\mland\OneDrive - Georgia Institute of Technology\Documents\Datasets\SWAT\SWaT_Dataset_Normal_v0.csv");
-experiment = getExperiment(swat, 4, 2, [2 3], 3);
-experiment.InputName = ["Flow meter", "Raw tank level"];
+experiment = getExperiment(swat, 4, 2, [2 ], 3);
+experiment.InputName = "Flow 101";% "Flow 201"];
 experiment.OutputName = "Raw tank level";
 
 size = 7200*2;
@@ -9,9 +9,9 @@ zv = experiment(size:2 * size);
 
 delays=delayest(ze)
 nn1=struc(1:5,1:5,delays(1));
-nn2=struc(1:5,1:5,delays(2));
+%nn2=struc(1:5,1:5,delays(2));
 selstruc(arxstruc(ze(:,:,1), zv(:,:,1), nn1))
-selstruc(arxstruc(ze(:,:,2),zv(:,:,2),nn2))
+%selstruc(arxstruc(ze(:,:,2),zv(:,:,2),nn2))
 %marx = arx(ze, "na", 4, "nb", [2 1], "nk", [0 2]);
 %mn4sid = n4sid(ze, 2:8, "InputDelay", [0 2]);
 function experiment = getExperiment(data, index, target, inputs, outputs)
@@ -43,8 +43,8 @@ function experiment = getExperiment(data, index, target, inputs, outputs)
         end
         start = after + 1;
     end
-    mean(experiment.InputData)
-    mean(experiment.OutputData)
+    input_meean = mean(experiment.InputData)
+    output_mean = mean(experiment.OutputData)
     experiment.InputData = experiment.InputData - ones(size(experiment.InputData, 1), 1) * mean(experiment.InputData);
     experiment.OutputData = experiment.OutputData - ones(size(experiment.OutputData, 1), 1) * mean(experiment.OutputData);
 end 
