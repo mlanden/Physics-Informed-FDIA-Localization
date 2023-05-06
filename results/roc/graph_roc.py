@@ -8,8 +8,8 @@ from sklearn.metrics import roc_curve
 if __name__ == '__main__':
     # files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean", "updated", "fp_reduce"]
     # names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant", "Updated Labels", "Reduced Invariants"]
-    files = ["fp_reduce", "equ", "long_equ"]
-    names = ["Reduced Invariants", "equation", "equation with long sequence"]
+    files = ["fp_reduce", "equ", "long_equ", "expand", "regularization"]
+    names = ["Reduced Invariants", "equation", "equation with long sequence", "equation no mean", "With regularization"]
     fig = plt.figure()
     for i in range(len(files)):
         with open(f"evaluation_losses_{files[i]}.json", "r") as fd:

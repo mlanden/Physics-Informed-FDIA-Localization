@@ -4,7 +4,7 @@ import yaml
 import sys
 import torch
 from pytorch_lightning import Trainer
-from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, LearningRateMonitor
+from pytorch_lightning.callbacks import ModelCheckpoint, RichProgressBar, LearningRateMonitor, EarlyStopping
 from pytorch_lightning.plugins import DDPPlugin
 from torch.utils.data import Subset, DataLoader
 import torch.multiprocessing as mp
@@ -17,8 +17,11 @@ from analysis import investigate_invariants
 from invariants import generate_predicates, InvariantMiner
 from equations import build_equations
 
+
 def train(config=None):
-    callbacks = [RichProgressBar(leave=True), LearningRateMonitor("epoch")]
+    callbacks = [RichProgressBar(leave=True), LearningRateMonitor("epoch"),
+                 EarlyStopping(monitor="val_loss",
+                               patience=20)]
     if config is not None:
         from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
         callbacks.append(TuneReportCheckpointCallback(
@@ -28,9 +31,10 @@ def train(config=None):
             filename="checkpoint",
             on="validation_end"
         ))
-        conf["model"]["hidden_layers"] = [config["l1"], config["l2"]]
-        conf["model"]["sequence_length"] = config["sequence_len"]
-        conf["model"]["window_size"] = config["sequence_len"] - 2
+        # conf["model"]["hidden_layers"] = [config["l1"], config["l2"]]
+        conf["train"]["regularization"] = config["regularization"]
+        # conf["model"]["sequence_length"] = config["sequence_len"]
+        # conf["model"]["window_size"] = config["sequence_len"] - 2
     else:
         callbacks.append(ModelCheckpoint(dirpath=checkpoint_dir,
                                          filename=checkpoint,
@@ -133,25 +137,24 @@ def hyperparameter_optimize():
 
     conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
     conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
-    conf["train"]["epochs"] = 20
+    # conf["train"]["epochs"] = 20
 
     config = {
-        # "lr": tune.loguniform(1e-4, 1e-1),
+        "regularization": tune.loguniform(1e-4, 1),
         # "batch_size": tune.choice([32, 64, 128])
-        "l1": tune.choice([20 * i for i in range(1, 6)]),
-        "l2": tune.choice([20 * i for i in range(1, 6)]),
-        "sequence_len": tune.choice([2 * i for i in range(2, 15)])
+        # "l1": tune.choice([20 * i for i in range(1, 6)]),
+        # "l2": tune.choice([20 * i for i in range(1, 6)]),
+        # "sequence_len": tune.choice([2 * i for i in range(2, 15)])
+
     }
 
     scheduler = ASHAScheduler(max_t=conf["train"]["epochs"],
-                              grace_period=1,
+                              grace_period=15,
                               reduction_factor=2)
-    reporter = CLIReporter(parameter_columns=["l1", "l2", "sequence_len"],
+    reporter = CLIReporter(parameter_columns=["regularization"],
                            metric_columns=["loss", "training_iterations"])
 
-    resources = {"gpu": 2}
-    global gpus
-    gpus = 1
+    resources = {"gpu": 1}
     tuner = tune.Tuner(
         tune.with_resources(train,
                             resources=resources),
@@ -161,7 +164,8 @@ def hyperparameter_optimize():
                                     num_samples=conf["train"]["num_samples"]),
         run_config=air.RunConfig(name="tune_ics",
                                  progress_reporter=reporter),
-        param_space=config
+        param_space=config,
+
     )
     results = tuner.fit()
     print("Best hyperparameters:", results.get_best_result().config)
@@ -178,7 +182,7 @@ if __name__ == '__main__':
     checkpoint = conf["train"]["checkpoint"]
 
     checkpoint_dir = path.join("checkpoint", checkpoint)
-    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}.ckpt")  # s
+    checkpoint_to_load = path.join(checkpoint_dir, f"{checkpoint}-v2.ckpt")  # s
     results_dir = path.join("results", conf["train"]["checkpoint"])
     if not path.exists(checkpoint_dir):
         os.makedirs(checkpoint_dir, exist_ok=True)
@@ -240,7 +244,7 @@ if __name__ == '__main__':
         equations = build_equations("swat", dataset.get_categorical_features(), dataset.get_continuous_features())
         values = []
         for unscaled_seq, scaled_seq, target in dataset:
-            value = equations[0].evaluate(unscaled_seq)
+            value = equations[1].evaluate(unscaled_seq)
             values.append(value)
             print(value)
         print("Mean:", np.mean(values))

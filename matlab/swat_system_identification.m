@@ -1,7 +1,7 @@
 swat = readtable("C:\Users\mland\OneDrive - Georgia Institute of Technology\Documents\Datasets\SWAT\SWaT_Dataset_Normal_v0.csv");
-experiment = getExperiment(swat, 4, 2, [2 ], 3);
-experiment.InputName = "Flow 101";% "Flow 201"];
-experiment.OutputName = "Raw tank level";
+experiment = getExperiment(swat, 26, 2, [19 ], 30);
+experiment.InputName = "Flow 301" ;% "flow 401"];
+experiment.OutputName = "RO tank level";
 
 size = 7200*2;
 ze = experiment(1:size);

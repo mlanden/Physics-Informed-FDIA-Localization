@@ -86,7 +86,7 @@ class ICSTrainer(LightningModule):
         return self.model(*x)
 
     def configure_optimizers(self):
-        optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate)  # , weight_decay=self.decay)
+        optimizer = optim.Adam(self.model.parameters(), lr=self.learning_rate, weight_decay=self.decay)
         # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer,
         #                                                        T_max=self.max_epochs,
         #                                                        eta_min=self.learning_rate / 50)
@@ -101,6 +101,7 @@ class ICSTrainer(LightningModule):
         }
 
     def training_step(self, batch, batch_idx):
+        # print(batch_idx, flush=True)
         self.hidden_states = None
         losses = self._compute_combine_losses(batch)
 
@@ -199,7 +200,7 @@ class ICSTrainer(LightningModule):
                     object_loss = evaluate_loss(self.equations, states, combined_outputs, self.n_workers)
                 object_loss = torch.mean(object_loss, dim=1).view(-1, 1)
                 losses = torch.concat([losses, object_loss], dim=1)
-                torch.save(losses, self.normal_losses_path)
+        torch.save(losses, self.normal_losses_path)
         return losses
 
     def _prep_evaluate_invariants(self):
@@ -259,8 +260,8 @@ class ICSTrainer(LightningModule):
         elif self.profile_type == "mean":
             obj = torch.load(self.normal_mean_path)
             self.normal_means = obj["mean"]
-            print(self.normal_means)
             self.normal_stds = obj["std"]
+            print(self.normal_means)
 
         if path.exists(self.losses_path) and self.load_checkpoint:
             obj = torch.load(self.losses_path)
@@ -315,16 +316,20 @@ class ICSTrainer(LightningModule):
             for score, attack in zip(scores, attacks):
                 self.eval_scores.append((-score / self.min_score, attack.float().item()))
         elif self.profile_type == "mean":
-            print(losses.device, self.normal_means.device)
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
+            debug = []
             # alarms = torch.any(scores > 7, dim=1)
-            alarms = torch.max(scores, dim=1).values > 1.85
+            alarms = torch.max(scores, dim=1).values > 40
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:
                 #     print(torch.max(score))
                 #     self.anomalies[torch.argmax(score).item()] += 1
+                if alarm:
+                    debug.append((torch.max(score).item(), torch.argmax(score).item(), attack.item()))
                 self.eval_scores.append((torch.max(score).item(), attack.float().item()))
 
+            with open("debug.json", "w") as fd:
+                json.dump(debug, fd)
             # anomalies = dict(sorted(self.anomalies.items(), key=lambda x: x[1], reverse=True))
             # for i in anomalies:
             #     print(i, anomalies[i])
