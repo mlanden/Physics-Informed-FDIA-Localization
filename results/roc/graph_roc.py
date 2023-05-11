@@ -1,5 +1,6 @@
 import os
 from os import path
+import numpy as np
 import json
 import matplotlib.pyplot as plt
 from sklearn.metrics import roc_curve
@@ -8,8 +9,8 @@ from sklearn.metrics import roc_curve
 if __name__ == '__main__':
     # files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean", "updated", "fp_reduce"]
     # names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant", "Updated Labels", "Reduced Invariants"]
-    files = ["fp_reduce", "equ", "long_equ", "expand", "regularization"]
-    names = ["Reduced Invariants", "equation", "equation with long sequence", "equation no mean", "With regularization"]
+    files = ["regulaization_mean", "prediction", "mse"]
+    names = ["Mean loss regularized", "No equations", "Equation MSE"]
     fig = plt.figure()
     for i in range(len(files)):
         with open(f"evaluation_losses_{files[i]}.json", "r") as fd:
@@ -33,6 +34,9 @@ if __name__ == '__main__':
         # print(thresholds.tolist())
     plt.xlabel("False Positive Rate")
     plt.ylabel("True Positive Rate")
+    plt.xticks(np.arange(0, 1.1, .1))
+    plt.yticks(np.arange(0, 1.1, .1))
     plt.legend()
-    # plt.savefig("roc.png")
-    plt.show()
+    plt.grid(True)
+    plt.savefig("roc.png")
+    # plt.show()

@@ -26,6 +26,7 @@ class ICSTrainer(LightningModule):
         self.save_hyperparameters()
         self.conf = conf
         self.categorical_values = categorical_values
+        self.continuous_values = continuous_values
         self.model = PredictionModel(conf, categorical_values)
         self.learning_rate = conf["train"]["lr"]
         self.decay = conf["train"]["regularization"]
@@ -155,8 +156,8 @@ class ICSTrainer(LightningModule):
 
     def save_intermediates(self, batch):
         losses = self.compute_loss(*batch)
-        for i in range(len(losses)):
-            losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
+        # for i in range(len(losses)):
+        #     losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
         losses = torch.cat(losses, dim=1).detach()
         self.states.append(batch[0].cpu().detach())
         outs = []
@@ -259,9 +260,11 @@ class ICSTrainer(LightningModule):
             self.min_score = torch.load(self.normal_gmm_path)
         elif self.profile_type == "mean":
             obj = torch.load(self.normal_mean_path)
-            self.normal_means = obj["mean"]
-            self.normal_stds = obj["std"]
-            print(self.normal_means)
+            self.normal_means = obj["mean"].cpu()
+            self.normal_stds = obj["std"].cpu()
+            if self.global_rank == 0:
+                print("Mean normal profile:", self.normal_means)
+                print("Standard deviation of normal profile:", self.normal_stds)
 
         if path.exists(self.losses_path) and self.load_checkpoint:
             obj = torch.load(self.losses_path)
@@ -319,7 +322,7 @@ class ICSTrainer(LightningModule):
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             debug = []
             # alarms = torch.any(scores > 7, dim=1)
-            alarms = torch.max(scores, dim=1).values > 40
+            alarms = torch.max(scores, dim=1).values > 3.75
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:
                 #     print(torch.max(score))

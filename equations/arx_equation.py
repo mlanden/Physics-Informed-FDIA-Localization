@@ -51,7 +51,7 @@ class ARXEquation(Equation):
             target -= 1
         actuator_states = torch.argmax(network_outputs[self.categorical_idx + 1], dim=1)
         is_target = (actuator_states == target).float()
-        return torch.abs(input_total - output_total) * is_target
+        return (input_total - output_total) ** 2 * is_target
 
     def _compute_total(self, states, indexes, coefficients):
         total = 0

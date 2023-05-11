@@ -1,5 +1,5 @@
 task: train
-#task: error
+task: error
 #task: test
 #task: "hyperparameter_optimize"
 #task: predicates
@@ -35,11 +35,12 @@ train:
   batch_size: 64
   epochs: 500
   lr: 0.1
-  scale: [30, 0.1]
-  regularization: 0.0053
+  scale: [30, 0.001]
+  regularization: 0.011
+#  regularization: 0.0053
   num_samples: 20
-  checkpoint: swat_2_equ
-#  checkpoint: swat_prediction
+#  checkpoint: swat_2_equ
+  checkpoint: swat_equ_mse
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
   load_checkpoint: 0
