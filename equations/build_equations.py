@@ -31,4 +31,30 @@ def build_equations(dataset, categorical_idxs, continuous_idxs):
             categorical_idxs,
             continuous_idxs
         ))
+        equations.append(ARXEquation(
+            [17, 27],
+            {17: [-0.3779],
+             27: [23.16]},
+            [28],
+            {28: [1, -0.9468, -0.0005742, -0.0001626, -0.004112, -0.00428, -0.04173]},
+            {17: 1.8410,
+             27: 1.7097,
+             28: 885.043},
+             30,
+             2,
+             categorical_idxs,
+             continuous_idxs
+        ))
+        equations.append(ARXEquation(
+            [40],
+            {40: [-3.488]},
+            [46],
+            {46: [1, -1.263, 0.2569]},
+            {40: 0.7384,
+             46: 191.4908},
+             42,
+             2,
+             categorical_idxs,
+             continuous_idxs
+        ))
     return equations

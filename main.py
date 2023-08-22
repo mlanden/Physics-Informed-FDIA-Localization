@@ -31,7 +31,7 @@ def train(config=None):
             filename="checkpoint",
             on="validation_end"
         ))
-        # conf["model"]["hidden_layers"] = [config["l1"], config["l2"]]
+        conf["model"]["hidden_layers"] = [config["l1"], config["l2"]]
         conf["train"]["regularization"] = config["regularization"]
         # conf["model"]["sequence_length"] = config["sequence_len"]
         # conf["model"]["window_size"] = config["sequence_len"] - 2
@@ -137,13 +137,13 @@ def hyperparameter_optimize():
 
     conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
     conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
-    # conf["train"]["epochs"] = 20
+    conf["train"]["epocs"] = 25
 
     config = {
         "regularization": tune.loguniform(1e-4, 1),
         # "batch_size": tune.choice([32, 64, 128])
-        # "l1": tune.choice([20 * i for i in range(1, 6)]),
-        # "l2": tune.choice([20 * i for i in range(1, 6)]),
+        "l1": tune.choice([20 * i for i in range(1, 6)]),
+        "l2": tune.choice([20 * i for i in range(1, 6)]),
         # "sequence_len": tune.choice([2 * i for i in range(2, 15)])
 
     }
@@ -151,7 +151,7 @@ def hyperparameter_optimize():
     scheduler = ASHAScheduler(max_t=conf["train"]["epochs"],
                               grace_period=15,
                               reduction_factor=2)
-    reporter = CLIReporter(parameter_columns=["regularization"],
+    reporter = CLIReporter(parameter_columns=list(config.keys()),
                            metric_columns=["loss", "training_iterations"])
 
     resources = {"gpu": 1}
@@ -244,7 +244,7 @@ if __name__ == '__main__':
         equations = build_equations("swat", dataset.get_categorical_features(), dataset.get_continuous_features())
         values = []
         for unscaled_seq, scaled_seq, target in dataset:
-            value = equations[1].evaluate(unscaled_seq)
+            value = equations[-1].evaluate(unscaled_seq)
             values.append(value)
             print(value)
         print("Mean:", np.mean(values))

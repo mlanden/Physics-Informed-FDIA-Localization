@@ -1,11 +1,11 @@
 task: train
 task: error
-#task: test
-#task: "hyperparameter_optimize"
+task: test
+task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 #task: analyze
-#task: equations
+# task: equations
 data:
 #  normal: ../data/SWAT/SWAT_NDSS_Normal.csv
   normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
@@ -30,7 +30,7 @@ model:
 
 train:
   n_workers: 3
-  gpus: 4
+  gpus: 1
   nodes: 1
   batch_size: 64
   epochs: 500
@@ -39,8 +39,8 @@ train:
   regularization: 0.011
 #  regularization: 0.0053
   num_samples: 20
-#  checkpoint: swat_2_equ
-  checkpoint: swat_equ_mse
+  checkpoint: swat_4_equ
+ # checkpoint: swat_equ_mse
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
   load_checkpoint: 0
