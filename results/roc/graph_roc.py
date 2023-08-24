@@ -9,11 +9,11 @@ from sklearn.metrics import roc_curve
 if __name__ == '__main__':
     # files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean", "updated", "fp_reduce"]
     # names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant", "Updated Labels", "Reduced Invariants"]
-    files = ["regulaization_mean", "prediction", "mse"]
-    names = ["Mean loss regularized", "No equations", "Equation MSE"]
+    experiments = ["swat_benchmark"]
+    names = ["Swat"]
     fig = plt.figure()
-    for i in range(len(files)):
-        with open(f"evaluation_losses_{files[i]}.json", "r") as fd:
+    for experiment, name in zip(experiments, names):
+        with open(f"../{experiment}/evaluation_losses.json", "r") as fd:
             data = json.load(fd)
 
         labels = []
@@ -23,10 +23,10 @@ if __name__ == '__main__':
             labels.append(label)
 
         fpr, tpr, thresholds = roc_curve(labels, scores)
-        plt.plot(fpr, tpr, label=names[i])
+        plt.plot(fpr, tpr, label=name)
         print()
         print()
-        print(names[i])
+        print(name)
         for i in range(len(tpr)):
             if .66 < tpr[i] < .75:
                 print(f"{i}, {tpr[i]:0.2f}, {fpr[i]:0.2f}, {thresholds[i]:.2f}")

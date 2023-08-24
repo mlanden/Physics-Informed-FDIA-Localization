@@ -156,8 +156,8 @@ class ICSTrainer(LightningModule):
 
     def save_intermediates(self, batch):
         losses = self.compute_loss(*batch)
-        # for i in range(len(losses)):
-        #     losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
+        for i in range(len(losses)):
+            losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
         losses = torch.cat(losses, dim=1).detach()
         self.states.append(batch[0].cpu().detach())
         outs = []
@@ -174,6 +174,7 @@ class ICSTrainer(LightningModule):
         for i, loss_fn in enumerate(self.loss_fns):
             losses = self.scale[i] * loss_fn(unscaled_seq, self.recent_outputs, target, self.categorical_values)
             loss.append(losses)
+            # print(losses)
         # return torch.concat(loss, dim=1)
         return loss
 
@@ -199,7 +200,7 @@ class ICSTrainer(LightningModule):
                     object_loss = evaluate_loss(self.invariants, states, combined_outputs, self.n_workers)
                 elif self.equations is not None:
                     object_loss = evaluate_loss(self.equations, states, combined_outputs, self.n_workers)
-                object_loss = torch.mean(object_loss, dim=1).view(-1, 1)
+                # object_loss = torch.mean(object_loss, dim=1).view(-1, 1)
                 losses = torch.concat([losses, object_loss], dim=1)
         torch.save(losses, self.normal_losses_path)
         return losses

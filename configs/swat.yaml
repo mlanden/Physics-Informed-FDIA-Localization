@@ -1,7 +1,7 @@
 task: train
 task: error
-task: test
-task: "hyperparameter_optimize"
+# task: test
+# task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 #task: analyze
@@ -30,16 +30,16 @@ model:
 
 train:
   n_workers: 3
-  gpus: 1
+  gpus: 4
   nodes: 1
   batch_size: 64
   epochs: 500
   lr: 0.1
   scale: [30, 0.001]
-  regularization: 0.011
+  regularization: 0.01
 #  regularization: 0.0053
   num_samples: 20
-  checkpoint: swat_4_equ
+  checkpoint: swat_structure
  # checkpoint: swat_equ_mse
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
