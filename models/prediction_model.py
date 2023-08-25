@@ -27,17 +27,18 @@ class PredictionModel(nn.Module):
         self.input_linear = nn.Linear(self.input_len, hidden_layers[0])
         self.embeddings = nn.ModuleList()
         self.classifications = nn.ModuleList()
+        self.hidden_size = hidden_layers[1]
         for size in self.categorical_values.values():
             if self.embedding_size > 0:
                 self.embeddings.append(nn.Embedding(size, self.embedding_size))
-            self.classifications.append(nn.Linear(hidden_layers[-1], size))
+            self.classifications.append(nn.Linear(self.hidden_size, size))
 
-        self.hidden_size = hidden_layers[1]
-        self.rnns = nn.ModuleList()
-        for i in range(len(hidden_layers[:-1])):
-            self.rnns.append(nn.LSTMCell(hidden_layers[i], hidden_layers[i + 1]))
+        self.rnns = nn.ModuleList([
+            nn.LSTMCell(self.hidden_size, self.hidden_size)
+            for i in range(len(hidden_layers))
+        ])
 
-        self.output_linear = nn.Linear(hidden_layers[-1], self.n_features - len(self.categorical_values))
+        self.output_linear = nn.Linear(self.hidden_size, self.n_features - len(self.categorical_values))
 
     def forward(self, unscaled_seq, scaled_seq, hidden_states=None):
         x = self.embed(unscaled_seq, scaled_seq)
@@ -46,22 +47,20 @@ class PredictionModel(nn.Module):
 
         if hidden_states is None:
             # Batch_size,
-            hx = torch.zeros((x.shape[0], self.hidden_size), dtype=torch.float32, device=x.device)
-            cx = torch.zeros((x.shape[0], self.hidden_size), dtype=torch.float32, device=x.device)
-            hidden_states = (hx, cx)
+            hx = [torch.zeros(x.shape[0], self.hidden_size).to(torch.float32).to(x.device) for i in self.rnns]
+            cx = [torch.zeros(x.shape[0], self.hidden_size).to(torch.float32).to(x.device) for i in self.rnns]
 
-        for time_step in range(x.shape[1]):
-            input_ = x[:, time_step, :]
-            hidden_states = self.rnns[0](input_, hidden_states)
+        for t in range(x.shape[1]):
+            x_t = x[:, t, :]
             for i in range(1, len(self.rnns)):
-                hidden_states = self.rnns[i](hidden_states[0], hidden_states)
-        output = hidden_states[0]
+                hx[i], cx[i] = self.rnns[i](x_t, (hx[i], cx[i]))
+        out = hx[-1]
 
-        continuous_outputs = self.output_linear(output)
+        continuous_outputs = self.output_linear(out)
         outputs = [continuous_outputs]
         for layer in self.classifications:
-            out = layer(output)
-            outputs.append(out)
+            output = layer(out)
+            outputs.append(output)
 
         return outputs, hidden_states
 

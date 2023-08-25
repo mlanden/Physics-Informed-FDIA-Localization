@@ -31,7 +31,7 @@ def train(config=None):
             filename="checkpoint",
             on="validation_end"
         ))
-        conf["model"]["hidden_layers"] = [config["l1"], config["l2"]]
+        conf["model"]["hidden_layers"] = [config["l1"], config["l2"], config["l3"]]
         conf["train"]["regularization"] = config["regularization"]
         # conf["model"]["sequence_length"] = config["sequence_len"]
         # conf["model"]["window_size"] = config["sequence_len"] - 2
@@ -77,6 +77,7 @@ def train(config=None):
 
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
     val_loader = DataLoader(validation_data, batch_size=batch_size, shuffle=False, drop_last=False)
+    torch.autograd.set_detect_anomaly(True)
     model = ICSTrainer(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
     if load_checkpoint and path.exists(checkpoint_to_load):
         trainer.fit(model, train_loader, val_loader,
@@ -144,6 +145,7 @@ def hyperparameter_optimize():
         # "batch_size": tune.choice([32, 64, 128])
         "l1": tune.choice([20 * i for i in range(1, 6)]),
         "l2": tune.choice([20 * i for i in range(1, 6)]),
+        "l3": tune.choice([20 * i for i in range(1, 6)]),
         # "sequence_len": tune.choice([2 * i for i in range(2, 15)])
 
     }

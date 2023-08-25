@@ -1,5 +1,5 @@
 task: train
-task: error
+# task: error
 # task: test
 # task: "hyperparameter_optimize"
 #task: predicates
@@ -19,7 +19,7 @@ data:
   n_features: 51
 
 model:
-  hidden_layers: [50, 20]
+  hidden_layers: [50, 50, 50]
 #  hidden_layers: [100, 100]
   activation: leakyRelu
   embedding_size: 10
@@ -30,7 +30,7 @@ model:
 
 train:
   n_workers: 3
-  gpus: 4
+  gpus: 1
   nodes: 1
   batch_size: 64
   epochs: 500
@@ -39,7 +39,7 @@ train:
   regularization: 0.01
 #  regularization: 0.0053
   num_samples: 20
-  checkpoint: swat_structure
+  checkpoint: swat_stacked
  # checkpoint: swat_equ_mse
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
@@ -53,7 +53,7 @@ train:
   validate_fraction: 0.1
   find_error_fraction: 0.4
 #  validation_frequency: 1
-  loss: equation
+  loss: equationno
   equation_name: swat
   max_gmm_components: 5
   distribution_threshold: 1.2

@@ -9,8 +9,8 @@ from sklearn.metrics import roc_curve
 if __name__ == '__main__':
     # files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean", "updated", "fp_reduce"]
     # names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant", "Updated Labels", "Reduced Invariants"]
-    experiments = ["swat_benchmark"]
-    names = ["Swat"]
+    experiments = ["swat_benchmark", "swat_structure"]
+    names = ["Swat", "Swat structure"]
     fig = plt.figure()
     for experiment, name in zip(experiments, names):
         with open(f"../{experiment}/evaluation_losses.json", "r") as fd:

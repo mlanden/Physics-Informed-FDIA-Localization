@@ -10,30 +10,31 @@ from datasets import ICSDataset, SWATDataset
 
 def prediction_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torch.Tensor, categorical_values: dict) ->\
     torch.Tensor:
-    losses = torch.zeros((batch.shape[0], batch.shape[-1]))
-    continuous_idx = 0
-    classification_idx = 0
-    class_loss = nn.CrossEntropyLoss(reduction="none")
-    continuous_loss = nn.MSELoss(reduction="none")
-    for i in range(batch.shape[-1]):
-        if i in categorical_values:
-            # Cross entropy_loss
-            logits = outputs[classification_idx + 1]
-            target_class = target[:, i].long()
-            # swat specific
-            if categorical_values[i] == 2:
-                target_class[:] -= 1
+    with torch.autograd.detect_anomaly():
+        losses = torch.zeros((batch.shape[0], batch.shape[-1]))
+        continuous_idx = 0
+        classification_idx = 0
+        class_loss = nn.CrossEntropyLoss(reduction="none")
+        continuous_loss = nn.MSELoss(reduction="none")
+        for i in range(batch.shape[-1]):
+            if i in categorical_values:
+                # Cross entropy_loss
+                logits = outputs[classification_idx + 1]
+                target_class = target[:, i].long()
+                # swat specific
+                if categorical_values[i] == 2:
+                    target_class[:] -= 1
 
-            losses[:, i] = class_loss(logits, target_class)
-            classification_idx += 1
-        else:
-            # MSE loss
-            predicted = outputs[0][:, continuous_idx]
-            target_value = target[:, continuous_idx] - batch[:, -1, continuous_idx]
-            losses[:, i] = continuous_loss(predicted, target_value)
-            continuous_idx += 1
-    # print(losses[0])
-    return losses
+                losses[:, i] = class_loss(logits, target_class)
+                classification_idx += 1
+            else:
+                # MSE loss
+                predicted = outputs[0][:, continuous_idx]
+                target_value = target[:, continuous_idx] - batch[:, -1, continuous_idx]
+                losses[:, i] = continuous_loss(predicted, target_value)
+                continuous_idx += 1
+        # print(losses[0])
+        return losses
 
 
 def invariant_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torch.Tensor, categorical_values: dict,
