@@ -14,7 +14,8 @@ class PredictionModel(nn.Module):
         self.checkpoint = conf["train"]["checkpoint"]
         self.categorical_values = categorical_values
 
-        hidden_layers = conf["model"]["hidden_layers"]
+        self.n_layers = conf["model"]["n_layers"]
+        self.hidden_size = conf["model"]["hidden_size"]
         self.n_features = conf["data"]["n_features"]
         self.embedding_size = conf["model"]["embedding_size"]
 
@@ -24,10 +25,9 @@ class PredictionModel(nn.Module):
         else:
             self.input_len = self.n_features + sum(self.categorical_values.values()) - len(self.categorical_values)
 
-        self.input_linear = nn.Linear(self.input_len, hidden_layers[0])
+        self.input_linear = nn.Linear(self.input_len, self.hidden_size)
         self.embeddings = nn.ModuleList()
         self.classifications = nn.ModuleList()
-        self.hidden_size = hidden_layers[1]
         for size in self.categorical_values.values():
             if self.embedding_size > 0:
                 self.embeddings.append(nn.Embedding(size, self.embedding_size))
@@ -35,25 +35,24 @@ class PredictionModel(nn.Module):
 
         self.rnns = nn.ModuleList([
             nn.LSTMCell(self.hidden_size, self.hidden_size)
-            for i in range(len(hidden_layers))
+            for i in range(self.n_layers)
         ])
 
         self.output_linear = nn.Linear(self.hidden_size, self.n_features - len(self.categorical_values))
 
-    def forward(self, unscaled_seq, scaled_seq, hidden_states=None):
+    def forward(self, unscaled_seq, scaled_seq):
         x = self.embed(unscaled_seq, scaled_seq)
         x = self.input_linear(x)
         x = self.activation(x)
 
-        if hidden_states is None:
-            # Batch_size,
-            hx = [torch.zeros(x.shape[0], self.hidden_size).to(torch.float32).to(x.device) for i in self.rnns]
-            cx = [torch.zeros(x.shape[0], self.hidden_size).to(torch.float32).to(x.device) for i in self.rnns]
+        hx = [torch.zeros(x.shape[0], self.hidden_size).to(torch.float32).to(x.device) for i in self.rnns]
+        cx = [torch.zeros(x.shape[0], self.hidden_size).to(torch.float32).to(x.device) for i in self.rnns]
 
         for t in range(x.shape[1]):
             x_t = x[:, t, :]
             for i in range(1, len(self.rnns)):
                 hx[i], cx[i] = self.rnns[i](x_t, (hx[i], cx[i]))
+                x_t = hx[i]
         out = hx[-1]
 
         continuous_outputs = self.output_linear(out)
@@ -62,9 +61,9 @@ class PredictionModel(nn.Module):
             output = layer(out)
             outputs.append(output)
 
-        return outputs, hidden_states
+        return outputs
 
-    def predict(self, batch: torch.Tensor, hidden_states: torch.Tensor = None) -> Union[
+    def predict(self, batch: torch.Tensor) -> Union[
         Tuple[torch.Tensor, Tuple], torch.Tensor]:
         intermediate, hidden_states = self.forward(batch, hidden_states)
 

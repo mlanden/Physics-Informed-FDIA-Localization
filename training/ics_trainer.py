@@ -49,8 +49,6 @@ class ICSTrainer(LightningModule):
         self.invariants_path = path.join(conf["train"]["checkpoint_dir"], conf["train"]["invariants"] + "_invariants.pkl")
         self.losses_path = path.join(self.checkpoint_dir, "evaluation_losses.pt")#_invariant_std.json")
         self.eval_scores_path = path.join(self.results_path, "evaluation_losses.json")
-        # self.anomalies = defaultdict(lambda: 0)
-        self.hidden_states = None
         self.recent_outputs = None
         self.invariants = None
         self.equations = None
@@ -102,8 +100,6 @@ class ICSTrainer(LightningModule):
         }
 
     def training_step(self, batch, batch_idx):
-        # print(batch_idx, flush=True)
-        self.hidden_states = None
         losses = self._compute_combine_losses(batch)
 
         for i in range(len(self.loss_names)):
@@ -133,7 +129,6 @@ class ICSTrainer(LightningModule):
             self.loss_names.append("Equation")
 
     def validation_step(self, batch, batch_idx):
-        self.hidden_states = None
         losses = self._compute_combine_losses(batch)
         loss = torch.sum(losses)
         self.log("val_loss", loss, prog_bar=True, sync_dist=False, on_step=False, on_epoch=True)
@@ -143,7 +138,6 @@ class ICSTrainer(LightningModule):
         if self.skip_test:
             return 0
 
-        self.hidden_states = None
         return self.save_intermediates(batch)
 
     def on_test_start(self):
@@ -168,7 +162,7 @@ class ICSTrainer(LightningModule):
         return self.losses[-1]
 
     def compute_loss(self, unscaled_seq, scaled_seq, target):
-        self.recent_outputs, self.hidden_states = self.model(unscaled_seq, scaled_seq, self.hidden_states)
+        self.recent_outputs = self.model(unscaled_seq, scaled_seq)
 
         loss = []
         for i, loss_fn in enumerate(self.loss_fns):
@@ -280,7 +274,6 @@ class ICSTrainer(LightningModule):
         self.attacks.append(attacks.cpu().detach())
         if self.skip_test:
             return 0
-        self.hidden_states = None
 
         return self.save_intermediates((unscaled_seq, scaled_seq, targets))
 

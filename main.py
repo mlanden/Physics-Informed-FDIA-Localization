@@ -31,7 +31,8 @@ def train(config=None):
             filename="checkpoint",
             on="validation_end"
         ))
-        conf["model"]["hidden_layers"] = [config["l1"], config["l2"], config["l3"]]
+        conf["model"]["hidden_size"] = config["hidden_size"]
+        conf["model"]["n_layers"] = config["n_layers"]
         conf["train"]["regularization"] = config["regularization"]
         # conf["model"]["sequence_length"] = config["sequence_len"]
         # conf["model"]["window_size"] = config["sequence_len"] - 2
@@ -54,7 +55,7 @@ def train(config=None):
                       devices=gpus,
                       num_nodes=num_nodes,
                       # strategy=DDPStrategy(find_unused_parameters=False),
-                      strategy=DDPPlugin(find_unused_parameters=False),
+                      strategy=DDPPlugin(find_unused_parameters=True),
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       callbacks=callbacks,
                       # limit_train_batches=3
@@ -142,12 +143,8 @@ def hyperparameter_optimize():
 
     config = {
         "regularization": tune.loguniform(1e-4, 1),
-        # "batch_size": tune.choice([32, 64, 128])
-        "l1": tune.choice([20 * i for i in range(1, 6)]),
-        "l2": tune.choice([20 * i for i in range(1, 6)]),
-        "l3": tune.choice([20 * i for i in range(1, 6)]),
-        # "sequence_len": tune.choice([2 * i for i in range(2, 15)])
-
+        "hidden_size": tune.choice([10 * i for i in range(1, 11)]),
+        "n_layers": tune.choice([1, 2, 3, 4])
     }
 
     scheduler = ASHAScheduler(max_t=conf["train"]["epochs"],
