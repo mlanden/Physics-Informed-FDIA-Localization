@@ -27,6 +27,7 @@ model:
   window_size: 8
   profile_type: mean
 #  profile_type: gmm
+  dropout: 0
 
 train:
   n_workers: 3
@@ -39,11 +40,11 @@ train:
   regularization: 0.0017
 #  regularization: 0.0053
   num_samples: 20
-  checkpoint: swat_optimized
+  checkpoint: swat_dropout
  # checkpoint: swat_equ_mse
 #  checkpoint: swat_2015_sequenced
   checkpoint_dir: checkpoint
-  load_checkpoint: 0
+  load_checkpoint: 1
 
   tensorboard: 1
   train_fraction: 0.3

@@ -18,6 +18,7 @@ class PredictionModel(nn.Module):
         self.hidden_size = conf["model"]["hidden_size"]
         self.n_features = conf["data"]["n_features"]
         self.embedding_size = conf["model"]["embedding_size"]
+        self.dropout = conf["model"]["dropout"]
 
         self.activation = activations[conf["model"]["activation"]]
         if self.embedding_size > 0:
@@ -33,11 +34,7 @@ class PredictionModel(nn.Module):
                 self.embeddings.append(nn.Embedding(size, self.embedding_size))
             self.classifications.append(nn.Linear(self.hidden_size, size))
 
-        self.rnns = nn.ModuleList([
-            nn.LSTMCell(self.hidden_size, self.hidden_size)
-            for i in range(self.n_layers)
-        ])
-
+        self.rnn = nn.LSTM(self.hidden_size, self.hidden_size, self.n_layers, batch_first=True, dropout=self.dropout)
         self.output_linear = nn.Linear(self.hidden_size, self.n_features - len(self.categorical_values))
 
     def forward(self, unscaled_seq, scaled_seq):
@@ -45,15 +42,10 @@ class PredictionModel(nn.Module):
         x = self.input_linear(x)
         x = self.activation(x)
 
-        hx = [torch.zeros(x.shape[0], self.hidden_size).to(torch.float32).to(x.device) for i in self.rnns]
-        cx = [torch.zeros(x.shape[0], self.hidden_size).to(torch.float32).to(x.device) for i in self.rnns]
-
-        for t in range(x.shape[1]):
-            x_t = x[:, t, :]
-            for i in range(1, len(self.rnns)):
-                hx[i], cx[i] = self.rnns[i](x_t, (hx[i], cx[i]))
-                x_t = hx[i]
-        out = hx[-1]
+        hx = torch.zeros(self.n_layers, x.size(0), self.hidden_size).to(torch.float32).to(x.device)
+        cx = torch.zeros(self.n_layers, x.size(0), self.hidden_size).to(torch.float32).to(x.device)
+        out, _ = self.rnn(x)
+        out = out[:, -1, :]
 
         continuous_outputs = self.output_linear(out)
         outputs = [continuous_outputs]

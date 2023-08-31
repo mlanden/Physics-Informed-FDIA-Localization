@@ -89,7 +89,7 @@ class ICSTrainer(LightningModule):
         # scheduler = optim.lr_scheduler.CosineAnnealingLR(optimizer,
         #                                                        T_max=self.max_epochs,
         #                                                        eta_min=self.learning_rate / 50)
-        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5)
+        scheduler = optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=15)
         # return [optimizer], [scheduler]
         return {
             "optimizer": optimizer,
@@ -316,7 +316,7 @@ class ICSTrainer(LightningModule):
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             debug = []
             # alarms = torch.any(scores > 7, dim=1)
-            alarms = torch.max(scores, dim=1).values > 3.75
+            alarms = torch.max(scores, dim=1).values > 2.7
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:
                 #     print(torch.max(score))

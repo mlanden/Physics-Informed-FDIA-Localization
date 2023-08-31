@@ -50,12 +50,10 @@ def train(config=None):
     batch_size = conf["train"]["batch_size"]
     batch_size = batch_size // gpus // num_nodes
     trainer = Trainer(default_root_dir=checkpoint_dir,
-                      # log_every_n_steps=10,
                       max_epochs=conf["train"]["epochs"],
                       devices=gpus,
                       num_nodes=num_nodes,
-                      # strategy=DDPStrategy(find_unused_parameters=False),
-                      strategy=DDPPlugin(find_unused_parameters=True),
+                      strategy=DDPPlugin(find_unused_parameters=False),
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       callbacks=callbacks,
                       # limit_train_batches=3
