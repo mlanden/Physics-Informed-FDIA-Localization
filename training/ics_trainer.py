@@ -322,6 +322,7 @@ class ICSTrainer(LightningModule):
                 #     print(torch.max(score))
                 #     self.anomalies[torch.argmax(score).item()] += 1
                 if alarm:
+
                     debug.append((torch.max(score).item(), torch.argmax(score).item(), attack.item()))
                 self.eval_scores.append((torch.max(score).item(), attack.float().item()))
 
