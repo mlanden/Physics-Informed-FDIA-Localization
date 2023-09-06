@@ -10,10 +10,11 @@ import numpy as np
 from sklearn.mixture import GaussianMixture
 
 import torch
+import pytorch_lightning as pl
 from pytorch_lightning import LightningModule
 from torch import optim
 
-from models import PredictionModel, invariant_loss, prediction_loss, equation_loss
+from models import PredictionModel, AutoencoderModel, invariant_loss, prediction_loss, equation_loss
 from utils import evaluate_loss
 from equations import build_equations
 eps = torch.finfo(torch.float32).eps
@@ -27,7 +28,6 @@ class ICSTrainer(LightningModule):
         self.conf = conf
         self.categorical_values = categorical_values
         self.continuous_values = continuous_values
-        self.model = PredictionModel(conf, categorical_values)
         self.learning_rate = conf["train"]["lr"]
         self.decay = conf["train"]["regularization"]
         self.loss = conf["train"]["loss"]
@@ -38,6 +38,7 @@ class ICSTrainer(LightningModule):
         self.profile_type = conf["model"]["profile_type"]
         self.load_checkpoint = conf["train"]["load_checkpoint"]
         self.scale = conf["train"]["scale"]
+        self.model_type = conf["model"]["type"]
 
         self.checkpoint_dir = path.join(conf["train"]["checkpoint_dir"], conf["train"]["checkpoint"])
         self.results_path = path.join("results", conf["train"]["checkpoint"])
@@ -57,9 +58,16 @@ class ICSTrainer(LightningModule):
         self.normal_stds = None
         self.min_score = None
         self.skip_test = False
-
         self.loss_fns = None
         self.loss_names = None
+
+        if self.model_type == "prediction":
+            self.model = PredictionModel(conf, categorical_values)
+        elif self.model_type == "autoencoder":
+            self.model = AutoencoderModel(conf, categorical_values)
+        else:
+            raise RuntimeError("Unknown model type")
+        
         if self.loss == "invariant":
             with open(self.invariants_path, "rb") as fd:
                 self.invariants = pickle.load(fd)
@@ -316,13 +324,12 @@ class ICSTrainer(LightningModule):
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             debug = []
             # alarms = torch.any(scores > 7, dim=1)
-            alarms = torch.max(scores, dim=1).values > 2.7
+            alarms = torch.max(scores, dim=1).values > 1.5
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:
                 #     print(torch.max(score))
                 #     self.anomalies[torch.argmax(score).item()] += 1
                 if alarm:
-
                     debug.append((torch.max(score).item(), torch.argmax(score).item(), attack.item()))
                 self.eval_scores.append((torch.max(score).item(), attack.float().item()))
 

@@ -1,12 +1,13 @@
 task: train
-task: error
-task: test
+# task: error
+# task: test
 # task: "hyperparameter_optimize"
 #task: predicates
 #task: invariants
 #task: analyze
 # task: equations
 data:
+  type: swat
 #  normal: ../data/SWAT/SWAT_NDSS_Normal.csv
   normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
 #  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
@@ -19,15 +20,19 @@ data:
   n_features: 51
 
 model:
+  type: autoencoder
+  # type: prediction
   hidden_size: 20
+  layer_sizes: [40, 20, 10]
   n_layers: 2
   activation: leakyRelu
   embedding_size: 10
   sequence_length: 10
-  window_size: 8
+  window_size: 5
   profile_type: mean
 #  profile_type: gmm
   dropout: 0
+
 
 train:
   n_workers: 3
@@ -36,17 +41,15 @@ train:
   batch_size: 64
   epochs: 500
   lr: 0.1
+  scale: [3, 0.001]
   scale: [30, 0.001]
   regularization: 0.0017
 #  regularization: 0.0053
   num_samples: 20
-  checkpoint: swat_dropout
- # checkpoint: swat_equ_mse
-#  checkpoint: swat_2015_sequenced
+  checkpoint: swat_autoencoder_equ_1equ
   checkpoint_dir: checkpoint
-  load_checkpoint: 1
+  load_checkpoint: 0
 
-  tensorboard: 1
   train_fraction: 0.3
 #  train_fraction: 0.1
 #  train_fraction: 0.8

@@ -1,0 +1,52 @@
+task: train
+task: error
+# task: test
+# task: "hyperparameter_optimize"
+# task: equations
+data:
+  type: grid
+  normal: ../data/grid/14_normal.csv
+  attack: ../data/grid/39_attack.csv
+  
+model:
+  type: autoencoder
+  # type: prediction
+  hidden_size: 20
+  layer_sizes: [40, 20, 10]
+  n_layers: 2
+  activation: leakyRelu
+  embedding_size: 10
+  sequence_length: 10
+  window_size: 5
+  profile_type: mean
+#  profile_type: gmm
+  dropout: 0
+
+
+train:
+  n_workers: 3
+  gpus: 4
+  nodes: 1
+  batch_size: 64
+  epochs: 500
+  lr: 0.1
+  scale: [3, 0.001]
+  scale: [30, 0.001]
+  regularization: 0.0017
+#  regularization: 0.0053
+  num_samples: 20
+  checkpoint: gridd_39
+  checkpoint_dir: checkpoint
+  load_checkpoint: 0
+
+  train_fraction: 0.3
+#  train_fraction: 0.1
+#  train_fraction: 0.8
+  invariant_fraction: 0.2
+  validate_fraction: 0.1
+  find_error_fraction: 0.4
+#  validation_frequency: 1
+  loss: equation
+  equation_name: grid
+  type: prediction
+  

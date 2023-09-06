@@ -11,11 +11,19 @@ import torch.multiprocessing as mp
 import numpy as np
 from pytorch_lightning.loggers import TensorBoardLogger
 
-from datasets import SWATDataset
+from datasets import SWATDataset, GridDataset
 from training import ICSTrainer
 from analysis import investigate_invariants
 from invariants import generate_predicates, InvariantMiner
 from equations import build_equations
+
+
+def get_dataset(conf, data_path, train, load_scalar, window_size):
+    type = conf["data"]["type"]
+    if type == "swat":
+        return SWATDataset(conf, data_path, window_size, train, load_scalar)
+    elif type == "grid":
+        return GridDataset(conf, data_path, window_size, train, load_scalar)
 
 
 def train(config=None):
@@ -57,14 +65,10 @@ def train(config=None):
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       callbacks=callbacks,
                       # limit_train_batches=3
-                      # track_grad_norm=2,
-                      # gradient_clip_val=0.1
+                    #   track_grad_norm=2,
+                      gradient_clip_val=1
                       )
-
-    dataset = SWATDataset(conf, conf["data"]["normal"],
-                          window_size=conf["model"]["window_size"],
-                          train=True,
-                          load_scaler=False)
+    dataset = get_dataset(conf,conf["data"]["normal"], True, False, conf["model"]["window_size"])
     datalen = len(dataset)
     invariant_len = int(datalen * invariant_fraction)
     train_len = int(datalen * train_fraction)
@@ -93,10 +97,8 @@ def find_normal_error():
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       )
 
-    dataset = SWATDataset(conf, conf["data"]["normal"],
-                          window_size=1,
-                          train=True,
-                          load_scaler=True)
+    dataset = get_dataset(conf, conf["data"]["normal"], True, True, 1)
+    
     model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
     print("Testing with", checkpoint_to_load)
     start = int((invariant_fraction + train_fraction + validate_fraction) * len(dataset))
@@ -110,10 +112,7 @@ def find_normal_error():
 
 
 def test():
-    dataset = SWATDataset(conf, conf["data"]["attack"],
-                          window_size=1,
-                          train=False,
-                          load_scaler=True)
+    dataset = get_dataset(conf, conf["data"]["attack"], False, True, 1)
     type_ = conf["train"]["type"]
     if type_ == "prediction":
         trainer = Trainer(default_root_dir=checkpoint_dir,
