@@ -39,9 +39,13 @@ def train(config=None):
             filename="checkpoint",
             on="validation_end"
         ))
-        conf["model"]["hidden_size"] = config["hidden_size"]
-        conf["model"]["n_layers"] = config["n_layers"]
+        # conf["model"]["hidden_size"] = config["hidden_size"]
+        # conf["model"]["n_layers"] = config["n_layers"]
         conf["train"]["regularization"] = config["regularization"]
+        conf["model"]["layer_sizes"] = [config["initial_size"]]
+        for i in range(config["n_layers"]):
+            conf["model"]["layer_sizes"].append(conf["model"]["layer_sizes"][-1] // 2)
+
         # conf["model"]["sequence_length"] = config["sequence_len"]
         # conf["model"]["window_size"] = config["sequence_len"] - 2
     else:
@@ -66,7 +70,7 @@ def train(config=None):
                       callbacks=callbacks,
                       # limit_train_batches=3
                     #   track_grad_norm=2,
-                      gradient_clip_val=1
+                      gradient_clip_val=0.5
                       )
     dataset = get_dataset(conf,conf["data"]["normal"], True, False, conf["model"]["window_size"])
     datalen = len(dataset)
@@ -140,7 +144,8 @@ def hyperparameter_optimize():
 
     config = {
         "regularization": tune.loguniform(1e-4, 1),
-        "hidden_size": tune.choice([10 * i for i in range(1, 11)]),
+        # "hidden_size": tune.choice([10 * i for i in range(1, 11)]),
+        "initial_size": tune.choice([2 ** i for i in range(4, 10)]),
         "n_layers": tune.choice([1, 2, 3, 4])
     }
 
@@ -233,11 +238,8 @@ if __name__ == '__main__':
         model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
         investigate_invariants(conf, checkpoint_dir, dataset, model)
     elif task == "equations":
-        dataset = SWATDataset(conf, conf["data"]["normal"],
-                              window_size=1,
-                              train=True,
-                              load_scaler=False)
-        equations = build_equations("swat", dataset.get_categorical_features(), dataset.get_continuous_features())
+        dataset = get_dataset(conf, conf["data"]["normal"], True, False, 1)
+        equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
         values = []
         for unscaled_seq, scaled_seq, target in dataset:
             value = equations[-1].evaluate(unscaled_seq)

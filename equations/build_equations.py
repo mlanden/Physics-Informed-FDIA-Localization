@@ -1,8 +1,9 @@
-
 from .arx_equation import ARXEquation
+from .real_power_equation import RealPowerEquation
 
 
-def build_equations(dataset, categorical_idxs, continuous_idxs):
+def build_equations(conf, categorical_idxs, continuous_idxs):
+    dataset = conf["data"]["type"]
     equations = []
     if dataset == "swat":
         equations.append(ARXEquation(
@@ -57,4 +58,8 @@ def build_equations(dataset, categorical_idxs, continuous_idxs):
         #      categorical_idxs,
         #      continuous_idxs
         # ))
+    elif dataset == "grid":
+        n_buses = conf["data"]["n_buses"]
+        admittance = conf["data"]["ybus"]
+        equations.append(RealPowerEquation(n_buses, admittance))
     return equations

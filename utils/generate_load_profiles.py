@@ -3,10 +3,10 @@ import numpy as np
 from collections import defaultdict
 
 if __name__ == "__main__":
-    name = "39"
+    name = "14"
     base_profile = f"../../data/grid/{name}_base.csv"
     base_data = pd.read_csv(base_profile)
-    n_profiles = 163000
+    n_profiles = 5000 // 3
     load_idxs = np.arange(len(base_data))
 
     for col in base_data:
@@ -20,5 +20,5 @@ if __name__ == "__main__":
                 std = np.std(new_loads)
                 variability = std / load * 100
                 print("variability", variability)
-        profiles = pd.DataFrame(profiles)
+        profiles = pd.DataFrame(profiles).sample(frac=1)
         profiles.to_csv(f"../../data/grid/{name}_{col}.csv", index=False)

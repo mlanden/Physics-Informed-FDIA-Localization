@@ -1,29 +1,19 @@
 task: train
-# task: error
-# task: test
+task: error
+task: test
 # task: "hyperparameter_optimize"
-#task: predicates
-#task: invariants
-#task: analyze
 # task: equations
 data:
   type: swat
-#  normal: ../data/SWAT/SWAT_NDSS_Normal.csv
   normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
-#  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Normal_v0.csv
-#  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWAT_NDSS_Normal.csv
-#  normal: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/First_Hour_2015.csv
-#  attack: ../data/SWAT/SWaT_Dataset_Attack_v0.csv
   attack: ../data/SWAT/SWaT_Dataset_Attack_modified.csv
-#  attack: ../data/SWAT/SWAT_NDSS_Attack.csv
-#  attack: C:/Users/mland/OneDrive - Georgia Institute of Technology/Documents/Datasets/SWAT/SWaT_Dataset_Attack_v0.csv
   n_features: 51
 
 model:
   type: autoencoder
   # type: prediction
   hidden_size: 20
-  layer_sizes: [40, 20, 10]
+  layer_sizes: [64, 32, 16, 8]
   n_layers: 2
   activation: leakyRelu
   embedding_size: 10
@@ -42,7 +32,6 @@ train:
   epochs: 500
   lr: 0.1
   scale: [3, 0.001]
-  scale: [30, 0.001]
   regularization: 0.0017
 #  regularization: 0.0053
   num_samples: 20
