@@ -19,8 +19,6 @@ class RealPowerEquation(Equation):
             s = s.replace(" ", "")
             if "j" in s:
                 s = s.replace("j", "") + "j"
-
-            print(s)
             return complex(s)
         
     def evaluate(self, states):
@@ -36,9 +34,11 @@ class RealPowerEquation(Equation):
                 v_j = states[-1, j_base_idk + 4]
                 theta_j = states[-1, j_base_idk + 3]
 
-                actual_power += np.abs(v_k) * np.abs(v_j) * (self.admittance.iloc[bus_k, bus_j].real * np.cos(theta_k - theta_j)
+                bus_power = np.abs(v_k) * np.abs(v_j) * (self.admittance.iloc[bus_k, bus_j].real * np.cos(theta_k - theta_j)
                                                                     + self.admittance.iloc[bus_k, bus_j].imag * np.sin(theta_k - theta_j))
+                actual_power += bus_power
             loss += (power_k - actual_power) ** 2
+            print(loss, power_k, actual_power)
         return loss            
         
     def confidence_loss(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:

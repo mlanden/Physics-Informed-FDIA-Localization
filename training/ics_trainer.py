@@ -79,7 +79,7 @@ class ICSTrainer(LightningModule):
             print("Mean antecedent:", np.mean(anteceds))
             print("Mean consequent:", np.mean(consequents))
         elif self.loss == "equation":
-            self.equations = build_equations(conf["train"]["equation_name"], categorical_values, continuous_values)
+            self.equations = build_equations(conf, categorical_values, continuous_values)
 
         self.losses = []
         self.states = []

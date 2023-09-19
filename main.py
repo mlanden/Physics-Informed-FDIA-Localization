@@ -12,7 +12,7 @@ import numpy as np
 from pytorch_lightning.loggers import TensorBoardLogger
 
 from datasets import SWATDataset, GridDataset
-from training import ICSTrainer
+from training import ICSTrainer, EquationDetector
 from analysis import investigate_invariants
 from invariants import generate_predicates, InvariantMiner
 from equations import build_equations
@@ -85,6 +85,7 @@ def train(config=None):
     train_loader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
     val_loader = DataLoader(validation_data, batch_size=batch_size, shuffle=False, drop_last=False)
     torch.autograd.set_detect_anomaly(True)
+    
     model = ICSTrainer(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
     if load_checkpoint and path.exists(checkpoint_to_load):
         trainer.fit(model, train_loader, val_loader,
@@ -172,6 +173,18 @@ def hyperparameter_optimize():
     print("Best hyperparameters:", results.get_best_result().config)
 
 
+def equation_detect():
+    dataset = get_dataset(conf,conf["data"]["normal"], True, False, conf["model"]["window_size"])
+    detector = EquationDetector(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
+
+    for batch in dataset:
+        detector.training_step(batch)
+
+    dataset = get_dataset(conf, conf["data"]["attack"], False, True, 1)
+    for state in dataset:
+        detector.detect(state)        
+    detector.print_stats()
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("Usage: main.py config")
@@ -238,14 +251,7 @@ if __name__ == '__main__':
         model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
         investigate_invariants(conf, checkpoint_dir, dataset, model)
     elif task == "equations":
-        dataset = get_dataset(conf, conf["data"]["normal"], True, False, 1)
-        equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
-        values = []
-        for unscaled_seq, scaled_seq, target in dataset:
-            value = equations[-1].evaluate(unscaled_seq)
-            values.append(value)
-            print(value)
-        print("Mean:", np.mean(values))
+        equation_detect()
 
     else:
         raise RuntimeError(f"Unknown task: {task}")

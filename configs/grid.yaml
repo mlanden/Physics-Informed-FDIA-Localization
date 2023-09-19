@@ -6,6 +6,7 @@ task: equations
 data:
   type: grid
   normal: ../data/grid/14_normal.csv
+  normal: ../data/grid/14_small.csv
   attack: ../data/grid/14_attack.csv
   ybus: ../data/grid/14_ybus.csv
   n_features: 117

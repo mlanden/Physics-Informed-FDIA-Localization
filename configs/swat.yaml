@@ -1,8 +1,8 @@
 task: train
-task: error
-task: test
+# task: error
+# task: test
 # task: "hyperparameter_optimize"
-# task: equations
+task: equations
 data:
   type: swat
   normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
@@ -25,6 +25,7 @@ model:
 
 
 train:
+  trainer: equation
   n_workers: 3
   gpus: 4
   nodes: 1
