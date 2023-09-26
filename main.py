@@ -1,5 +1,6 @@
 import os
 from os import path
+from pprint import pprint
 import yaml
 import sys
 import torch
@@ -9,7 +10,6 @@ from pytorch_lightning.plugins import DDPPlugin
 from torch.utils.data import Subset, DataLoader
 import torch.multiprocessing as mp
 import numpy as np
-from pytorch_lightning.loggers import TensorBoardLogger
 
 from datasets import SWATDataset, GridDataset
 from training import ICSTrainer, EquationDetector
@@ -28,26 +28,31 @@ def get_dataset(conf, data_path, train, load_scalar, window_size):
 
 def train(config=None):
     callbacks = [RichProgressBar(leave=True), LearningRateMonitor("epoch"),
-                 EarlyStopping(monitor="val_loss",
-                               patience=20)]
+                 EarlyStopping(monitor="val_loss", patience=20,)
+                 ]
     if config is not None:
         from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
         callbacks.append(TuneReportCheckpointCallback(
             metrics={
-                "loss": "val_loss"
+                "loss": "unscaled_val_loss"
             },
             filename="checkpoint",
             on="validation_end"
         ))
+        # Prediction
         # conf["model"]["hidden_size"] = config["hidden_size"]
         # conf["model"]["n_layers"] = config["n_layers"]
-        conf["train"]["regularization"] = config["regularization"]
-        conf["model"]["layer_sizes"] = [config["initial_size"]]
-        for i in range(config["n_layers"]):
-            conf["model"]["layer_sizes"].append(conf["model"]["layer_sizes"][-1] // 2)
+        if "regularization" in config:
+            conf["train"]["regularization"] = config["regularization"]
 
-        # conf["model"]["sequence_length"] = config["sequence_len"]
-        # conf["model"]["window_size"] = config["sequence_len"] - 2
+        # Autoencoder
+        if "initial_size" in config:
+            conf["model"]["layer_sizes"] = [config["initial_size"]]
+            for i in range(config["n_layers"]):
+                conf["model"]["layer_sizes"].append(conf["model"]["layer_sizes"][-1] // 2)
+        
+        if "equ_scale" in config:
+            conf["train"]["scale"][1] = config["equ_scale"]
     else:
         callbacks.append(ModelCheckpoint(dirpath=checkpoint_dir,
                                          filename=checkpoint,
@@ -68,7 +73,7 @@ def train(config=None):
                       strategy=DDPPlugin(find_unused_parameters=False),
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       callbacks=callbacks,
-                      # limit_train_batches=3
+                    #   limit_train_batches=3
                     #   track_grad_norm=2,
                       gradient_clip_val=0.5
                       )
@@ -142,12 +147,15 @@ def hyperparameter_optimize():
     conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
     conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
     conf["train"]["epocs"] = 25
+    global gpus
+    gpus = 1
 
     config = {
-        "regularization": tune.loguniform(1e-4, 1),
+        # "regularization": tune.loguniform(1e-4, 1),
         # "hidden_size": tune.choice([10 * i for i in range(1, 11)]),
-        "initial_size": tune.choice([2 ** i for i in range(4, 10)]),
-        "n_layers": tune.choice([1, 2, 3, 4])
+        # "initial_size": tune.choice([2 ** i for i in range(4, 10)]),
+        # "n_layers": tune.choice([1, 2, 3, 4]),
+        "equ_scale": tune.loguniform(1e-3, 1)
     }
 
     scheduler = ASHAScheduler(max_t=conf["train"]["epochs"],
@@ -170,7 +178,8 @@ def hyperparameter_optimize():
 
     )
     results = tuner.fit()
-    print("Best hyperparameters:", results.get_best_result().config)
+    print("Best hyperparameters:", results.get_best_result())
+    print(results.get_best_result().config)
 
 
 def equation_detect():
@@ -181,9 +190,16 @@ def equation_detect():
         detector.training_step(batch)
 
     dataset = get_dataset(conf, conf["data"]["attack"], False, True, 1)
-    for state in dataset:
-        detector.detect(state)        
-    detector.print_stats()
+    attack_map = dataset.get_attack_map()
+    for i, state in enumerate(dataset):
+        attack = -1
+        for idx in attack_map:
+            if i in attack_map[idx]:
+                attack = idx
+        if attack == 6:
+            print(i, end=" ")
+        detector.detect(state, attack)
+    detector.print_stats(dataset.get_attack_map())
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

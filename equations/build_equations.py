@@ -20,18 +20,16 @@ def build_equations(conf, categorical_idxs, continuous_idxs):
             continuous_idxs
         ))
         equations.append(ARXEquation(
-            [8, 17],
-            {8: [99.47, 44.46, -28.9, -23.7],
-             17: [9.959, -9.017, -2.192, -7.384, 7.952]},
-            [18],
-            {18: [1, -0.3917, -0.2747, -0.1852, -0.08768, -0.06009]},
-            {8: 2.4404,
-             17: 2.0057,
-             18: 881.5305},
-            9,
-            2,
-            categorical_idxs,
-            continuous_idxs
+             [17],
+             {17: [-17.41, 18.86, 0.8624, -1.932, -2.418]},
+             [18],
+             {18: [1, -1.084, -0.07043, 0.06858, 0.0673, 0.01859]},
+             {17: 2.2090,
+              18: 891.4156},
+              24,
+              2,
+              categorical_idxs,
+              continuous_idxs
         ))
         equations.append(ARXEquation(
             [17, 27],
@@ -58,6 +56,19 @@ def build_equations(conf, categorical_idxs, continuous_idxs):
              2,
              categorical_idxs,
              continuous_idxs
+        ))
+
+        #AR
+        equations.append(ARXEquation(
+            [],
+            {},
+            [16],
+            {16: [ 1, -1.586, 0.3369, 0.2501]},
+            {16: 16.7936},
+            19,
+            1,
+            categorical_idxs,
+            continuous_idxs
         ))
     elif dataset == "grid":
         n_buses = conf["data"]["n_buses"]

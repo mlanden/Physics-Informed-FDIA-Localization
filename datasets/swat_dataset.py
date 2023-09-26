@@ -19,6 +19,7 @@ class SWATDataset(ICSDataset):
         start = START if train else 0
         self.features = self.data.iloc[start:, 1: -1].to_numpy().astype(np.float32)
         self.labels = self.data.iloc[start:, -1] == "Attack"
+        self.labels = self.labels.to_numpy()
 
         self.make_sequences(load_scaler)
         print(f"Created {len(self.sequences)} sequences")

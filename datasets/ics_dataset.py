@@ -1,3 +1,4 @@
+from collections import defaultdict
 from os import path
 import numpy as np
 import pandas as pd
@@ -20,6 +21,7 @@ class ICSDataset(ABC, Dataset):
         self.scale_file = path.join("checkpoint", self.checkpoint, "scaler.gz")
         self.features = None
         self.labels = None
+        self.attack_idxs = None
         self.scaled_features = None
         
     @abstractmethod
@@ -43,6 +45,8 @@ class ICSDataset(ABC, Dataset):
         self.sequences, self.targets = None, None
         self.sequences = []
         self.targets = []
+        self.attack_idxs = []
+        attack_map = self.get_attack_map()
         i = 0
         while i < len(self.features) - self.sequence_len:
             seq = (i, i + self.sequence_len)
@@ -52,6 +56,11 @@ class ICSDataset(ABC, Dataset):
                 target = i + self.sequence_len - 1
             self.sequences.append(seq)
             self.targets.append(target)
+            attack = -1
+            for idx in attack_map:
+                if i in attack_map[idx]:
+                    attack = idx
+            self.attack_idxs.append(attack)
             i += self.window_size
 
     def __len__(self):
@@ -64,7 +73,21 @@ class ICSDataset(ABC, Dataset):
         if self.train:
             return unscaled_seq, scaled_seq, self.features[self.targets[item]]
         else:
-            return unscaled_seq, scaled_seq, self.features[self.targets[item]], self.labels.to_numpy()[item]
+            return unscaled_seq, scaled_seq, self.features[self.targets[item]], self.labels[item], self.attack_idxs[item]
 
     def get_data(self):
         return self.features, self.labels
+
+    def get_attack_map(self):
+        attack_map = defaultdict(list)
+        is_attack = False
+        attack_idx = 1
+        for i in range(len(self.labels)):
+            if self.labels[i]:
+                is_attack = True
+                attack_map[attack_idx].append(i)
+
+            elif not self.labels[i] and is_attack:
+                attack_idx += 1
+                is_attack = False
+        return attack_map

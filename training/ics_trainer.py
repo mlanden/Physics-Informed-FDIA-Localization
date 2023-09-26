@@ -67,6 +67,7 @@ class ICSTrainer(LightningModule):
             self.model = AutoencoderModel(conf, categorical_values)
         else:
             raise RuntimeError("Unknown model type")
+        print(self.model)
         
         if self.loss == "invariant":
             with open(self.invariants_path, "rb") as fd:
@@ -86,7 +87,10 @@ class ICSTrainer(LightningModule):
         self.batch_ids = []
         self.outputs = []
         self.attacks = []
+        self.attack_idxs = []
         self.eval_scores = []
+        self.fp_counts = []
+        self.tp_counts = []
 
     def forward(self, *x):
         # print(x)
@@ -109,11 +113,10 @@ class ICSTrainer(LightningModule):
 
     def training_step(self, batch, batch_idx):
         losses = self._compute_combine_losses(batch)
-
         for i in range(len(self.loss_names)):
             self.log(self.loss_names[i] + "_Train_loss", losses[i], prog_bar=True, on_step=False,
                      on_epoch=True, sync_dist=False)
-
+            losses[i] *= self.scale[i]
         loss = torch.sum(losses)
         self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=False)
         return loss
@@ -138,6 +141,10 @@ class ICSTrainer(LightningModule):
 
     def validation_step(self, batch, batch_idx):
         losses = self._compute_combine_losses(batch)
+        unscaled_loss = torch.sum(losses)
+        self.log("unscaled_val_loss", unscaled_loss)
+        for i in range(len(losses)):
+            losses[i] *= self.scale[i]
         loss = torch.sum(losses)
         self.log("val_loss", loss, prog_bar=True, sync_dist=False, on_step=False, on_epoch=True)
         return loss
@@ -174,7 +181,7 @@ class ICSTrainer(LightningModule):
 
         loss = []
         for i, loss_fn in enumerate(self.loss_fns):
-            losses = self.scale[i] * loss_fn(unscaled_seq, self.recent_outputs, target, self.categorical_values)
+            losses = loss_fn(unscaled_seq, self.recent_outputs, target, self.categorical_values)
             loss.append(losses)
             # print(losses)
         # return torch.concat(loss, dim=1)
@@ -278,8 +285,9 @@ class ICSTrainer(LightningModule):
             self.skip_test = False
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
-        unscaled_seq, scaled_seq, targets, attacks = batch
+        unscaled_seq, scaled_seq, targets, attacks, attaack_idks = batch
         self.attacks.append(attacks.cpu().detach())
+        self.attack_idxs.append(attaack_idks.cpu().detach())
         if self.skip_test:
             return 0
 
@@ -287,9 +295,13 @@ class ICSTrainer(LightningModule):
 
     def on_predict_end(self):
         attacks = torch.concat(self.attacks, dim=0)
+        attack_idxs = torch.concat(self.attack_idxs, dim=0)
         if self.trainer.gpus != 1:
             attacks = self.all_gather(attacks)
+            attack_idxs = self.all_gather(attack_idxs)
             attacks = attacks.view(attacks.shape[0] * attacks.shape[1], -1).cpu()
+            attack_idxs = attack_idxs.view(attack_idxs.shape[0] * attack_idxs.shape[1], -1).cpu()
+
         if not self.skip_test:
             losses = torch.concat([loss for loss in self.losses], dim=0)
             losses = self._complete_losses(losses)
@@ -305,13 +317,15 @@ class ICSTrainer(LightningModule):
         if self.global_rank == 0:
             alerts = self.alert(losses, attacks)
             print("Alerts generated")
-            self.detect(alerts, attacks)
+            self.detect(alerts, attacks, attack_idxs)
 
             with open(self.eval_scores_path, "w") as fd:
                 json.dump(self.eval_scores, fd)
 
     def alert(self, losses, attacks):
         losses = losses.cpu()
+        self.fp_counts = [0 for _ in range(losses.size(1))]
+        self.tp_counts = [0 for _ in range(losses.size(1))]
         if self.profile_type == "gmm":
             print("Min", self.min_score)
             scores = self.normal_model.score_samples(losses.numpy())
@@ -324,13 +338,19 @@ class ICSTrainer(LightningModule):
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             debug = []
             # alarms = torch.any(scores > 7, dim=1)
-            alarms = torch.max(scores, dim=1).values > 1.5
+            alarms = torch.max(scores, dim=1).values > 2.5
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:
                 #     print(torch.max(score))
                 #     self.anomalies[torch.argmax(score).item()] += 1
                 if alarm:
                     debug.append((torch.max(score).item(), torch.argmax(score).item(), attack.item()))
+                max_idx = torch.argmax(score).item()
+                if alarm and not attack:
+                    self.fp_counts[max_idx] += 1
+                elif alarm and attack:
+                    self.tp_counts[max_idx] += 1
+
                 self.eval_scores.append((torch.max(score).item(), attack.float().item()))
 
             with open("debug.json", "w") as fd:
@@ -346,8 +366,8 @@ class ICSTrainer(LightningModule):
             raise RuntimeError("Unknown profile type")
         return alarms
 
-    def detect(self, predicted, actual):
-        cm = confusion_matrix(actual, predicted)
+    def detect(self, alerts, attacks, attack_idxs):
+        cm = confusion_matrix(attacks, alerts)
         tp = cm[1][1]
         fp = cm[0][1]
         fn = cm[1][0]
@@ -360,7 +380,7 @@ class ICSTrainer(LightningModule):
         recall = tpr
         precision = tp / (tp + fp)
         f1 = 2 * precision * recall / (precision + recall)
-        accuracy = (tp + tn) / len(actual)
+        accuracy = (tp + tn) / len(attacks)
         print(f"True Positive: {tpr * 100 :3.2f}")
         print(f"True Negative: {tnr * 100 :3.2f}")
         print(f"False Positive: {fpr * 100 :3.2f}")
@@ -370,23 +390,33 @@ class ICSTrainer(LightningModule):
         print(f"Accuracy: {accuracy * 100 :3.2f}")
 
         dwells = []
-        fns = []
+        attacks_detected = set()
+        fns = set()
         attack = False
         detect = False
         start = 0
-        for i in range(len(actual)):
-            if actual[i] and not predicted[i]:
-                fns.append(i)
-            if actual[i] and not attack:
+        for i in range(len(attacks)):
+            if attacks[i] and not alerts[i]:
+                # False neg
+                fns.add(attack_idxs[i].item())
+
+
+            if not attacks[i]:
+                attack = False
+            
+            if attacks[i] and not attack:
                 attack = True
                 start = i
+                detect = False
 
-            if attack and not detect and predicted[i]:
+            if attack and not detect and alerts[i]:
                 dwells.append(i - start)
-                attack = False
                 detect = True
+                attacks_detected.add(attack_idxs[i].item())
+
         dwell_time = np.mean(dwells)
         print(f"Dwell time: {dwell_time :.2f}")
-
-        with open("fn_ids_physics_informed.json", "w") as fd:
-            json.dump(fns, fd)
+        print("Attacks detected:", attacks_detected)
+        print("True positive counts:", self.tp_counts)
+        print("False positive counts:", self.fp_counts)
+        print("False negative attacks:", fns)

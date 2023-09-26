@@ -16,6 +16,7 @@ class EquationDetector():
         self.deltas = [None for _ in self.equations]
         self.cumsum_states = [0 for _ in self.equations]
         self.thresholds = [0 for _ in self.equations]
+        self.hits = [0 for _ in self.equations]
         self.attacks = []
         self.alerts = []
 
@@ -26,30 +27,33 @@ class EquationDetector():
             loss = self.equations[i].evaluate(unscaled_seq)
             self.residuals[i].append(loss)
 
-    def detect(self, state):
+    def detect(self, state, attack_idx):
         if any(delta is None for delta in self.deltas):
+            means = [0 for _ in self.equations]
+            stds = [0 for _ in self.equations]
             for i in range(len(self.equations)):
-                mean = np.mean(self.residuals[i])
-                std = np.std(self.residuals[i])
-                self.deltas[i] = mean + 2 * std
+                means[i] = np.mean(self.residuals[i])
+                stds[i] = np.std(self.residuals[i])
+                self.deltas[i] = means[i] + 2 * stds[i]
+            print("Mean:", means)
+            print("Standard dev:", stds)
             print(self.deltas)
-        unscaled_seq, scaled_seq, target, attack = state
+        unscaled_seq, scaled_seq, target, attack, attack_idx = state
 
         for i in range(len(self.equations)):
             residual = self.equations[i].evaluate(unscaled_seq)
             self.cumsum_states[i] = max(0, self.cumsum_states[i] + residual - self.deltas[i])
     
-        # if attack:
-        #     print(self.cumsum_states)
         alert = False
         for i in range(len(self.equations)):
             if self.cumsum_states[i] > self.thresholds[i]:
                 alert = True
                 self.cumsum_states[i] = 0
+                self.hits[i] += 1
         self.attacks.append(attack)
         self.alerts.append(alert)
 
-    def print_stats(self):
+    def print_stats(self, attack_map):
         cm = confusion_matrix(self.attacks, self.alerts)
         tp = cm[1][1]
         fp = cm[0][1]
@@ -73,20 +77,28 @@ class EquationDetector():
         print(f"Accuracy: {accuracy * 100 :3.2f}")
 
         dwells = []
-        fns = []
+        detected_attacks = []
         attack = False
         detect = False
         start = 0
         for i in range(len(self.attacks)):
-            if self.attacks[i] and not self.alerts[i]:
-                fns.append(i)
+            if not self.attacks[i]:
+                attack = False
+
             if self.attacks[i] and not attack:
                 attack = True
                 start = i
+                detect = False
 
             if attack and not detect and self.alerts[i]:
+                print(i)
                 dwells.append(i - start)
-                attack = False
                 detect = True
+                for attack in attack_map:
+                    if i in attack_map[attack]:
+                        detected_attacks.append(attack)
+        
         dwell_time = np.mean(dwells)
         print(f"Dwell time: {dwell_time :.2f}")
+        print("Detected attacks:", detected_attacks)
+        print("Hits:", self.hits)

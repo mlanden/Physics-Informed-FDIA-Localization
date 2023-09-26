@@ -1,8 +1,8 @@
 task: train
-# task: error
-# task: test
+task: error
+task: test
 # task: "hyperparameter_optimize"
-task: equations
+# task: equations
 data:
   type: swat
   normal: ../data/SWAT/SWaT_Dataset_Normal_v0.csv
@@ -18,25 +18,25 @@ model:
   activation: leakyRelu
   embedding_size: 10
   sequence_length: 10
-  window_size: 5
+  window_size: 8
   profile_type: mean
 #  profile_type: gmm
   dropout: 0
 
 
 train:
-  trainer: equation
   n_workers: 3
   gpus: 4
   nodes: 1
   batch_size: 64
-  epochs: 500
+  epochs: 100
   lr: 0.1
-  scale: [3, 0.001]
+  scale: [1, 0.066]
   regularization: 0.0017
 #  regularization: 0.0053
   num_samples: 20
-  checkpoint: swat_autoencoder_equ_1equ
+  checkpoint: swat_scale
+  checkpoint: swat_autoencoder_equ
   checkpoint_dir: checkpoint
   load_checkpoint: 0
 

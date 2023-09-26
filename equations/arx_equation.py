@@ -32,9 +32,9 @@ class ARXEquation(Equation):
         # quit()
         # check for actuator state
         target = self.target_state
-        if self.categorical_features[self.actuator_idx] == 2:
-            target -= 1
         is_target = (states[-1, self.actuator_idx] == target).astype(float)
+        # print(input_total, output_total, is_target)
+
         return abs(input_total - output_total) * is_target
 
     def confidence_loss(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
