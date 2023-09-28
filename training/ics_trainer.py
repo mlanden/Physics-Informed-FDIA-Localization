@@ -114,9 +114,9 @@ class ICSTrainer(LightningModule):
     def training_step(self, batch, batch_idx):
         losses = self._compute_combine_losses(batch)
         for i in range(len(self.loss_names)):
+            losses[i] *= self.scale[i]
             self.log(self.loss_names[i] + "_Train_loss", losses[i], prog_bar=True, on_step=False,
                      on_epoch=True, sync_dist=False)
-            losses[i] *= self.scale[i]
         loss = torch.sum(losses)
         self.log("train_loss", loss, prog_bar=True, on_step=False, on_epoch=True, sync_dist=False)
         return loss
@@ -136,6 +136,7 @@ class ICSTrainer(LightningModule):
             self.loss_fns.append(partial(invariant_loss, invariants=self.invariants))
             self.loss_names.append("Invariant")
         if self.equations is not None:
+            
             self.loss_fns.append(partial(equation_loss, equations=self.equations))
             self.loss_names.append("Equation")
 
@@ -338,7 +339,7 @@ class ICSTrainer(LightningModule):
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             debug = []
             # alarms = torch.any(scores > 7, dim=1)
-            alarms = torch.max(scores, dim=1).values > 2.5
+            alarms = torch.max(scores, dim=1).values > 2.3
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:
                 #     print(torch.max(score))

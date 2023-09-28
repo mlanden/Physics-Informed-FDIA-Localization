@@ -16,7 +16,7 @@ class GridDataset(ICSDataset):
         self.features = self.data.iloc[:, 2: -1].to_numpy().astype(np.float32)
         self.labels = self.data.iloc[:, -1] == "Yes"
         self.labels = self.labels.to_numpy()
-        self.make_sequences(load_scaler)
+        self.make_sequences(load_scaler)         
 
     def get_categorical_features(self):
         return {}

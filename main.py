@@ -28,7 +28,7 @@ def get_dataset(conf, data_path, train, load_scalar, window_size):
 
 def train(config=None):
     callbacks = [RichProgressBar(leave=True), LearningRateMonitor("epoch"),
-                 EarlyStopping(monitor="val_loss", patience=20,)
+                 EarlyStopping(monitor="val_loss", patience=15,)
                  ]
     if config is not None:
         from ray.tune.integration.pytorch_lightning import TuneReportCheckpointCallback
@@ -268,6 +268,12 @@ if __name__ == '__main__':
         investigate_invariants(conf, checkpoint_dir, dataset, model)
     elif task == "equations":
         equation_detect()
+    elif task == "equ_error":
+        dataset = get_dataset(conf,conf["data"]["normal"], True, False, conf["model"]["window_size"])
+        equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
+        for unscaled, scaled, target in dataset:
+            print(equations[0].evaluate(unscaled))
+            break
 
     else:
         raise RuntimeError(f"Unknown task: {task}")

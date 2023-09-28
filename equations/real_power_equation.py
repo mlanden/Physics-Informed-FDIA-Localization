@@ -28,6 +28,7 @@ class RealPowerEquation(Equation):
             v_k = states[-1, k_base_idx + 4]
             power_k = states[-1, k_base_idx + 2]
             theta_k = states[-1, k_base_idx + 3]
+            print(k_base_idx, v_k, power_k, theta_k)
             actual_power = 0
             for bus_j in range(self.n_buses):
                 j_base_idk = 5 * bus_j

@@ -1,6 +1,6 @@
 task: train
-task: error
-task: test
+# task: error
+# task: test
 # task: "hyperparameter_optimize"
 # task: equations
 data:
@@ -11,11 +11,11 @@ data:
 
 model:
   type: autoencoder
-  # type: prediction
-  hidden_size: 20
+  type: prediction
+  hidden_size: 50
   layer_sizes: [64, 32, 16, 8]
-  n_layers: 2
-  activation: leakyRelu
+  n_layers: 1
+  activation: tanh
   embedding_size: 10
   sequence_length: 10
   window_size: 8
@@ -31,12 +31,12 @@ train:
   batch_size: 64
   epochs: 100
   lr: 0.1
-  scale: [1, 0.066]
+  scale: [10, 0.0005]
   regularization: 0.0017
 #  regularization: 0.0053
   num_samples: 20
-  checkpoint: swat_scale
-  checkpoint: swat_autoencoder_equ
+  checkpoint: swat_shallow
+  # checkpoint: swat_autoencoder_equ
   checkpoint_dir: checkpoint
   load_checkpoint: 0
 
