@@ -9,7 +9,7 @@ from sklearn.metrics import roc_curve
 if __name__ == '__main__':
     # files = ["noinvariant_mean", "noinvariant_gmm", "invariant_mean", "updated", "fp_reduce"]
     # names = ["Z Score, No invariant", "GMM No Invariant", "Z Score Invariant", "Updated Labels", "Reduced Invariants"]
-    experiments = ["swat_optimized", "swat_tanh"]
+    experiments = ["swat_optimized", "swat_long"]
     names = ["Swat", "Swat Debug"]
     fig = plt.figure()
     for experiment, name in zip(experiments, names):
@@ -22,6 +22,7 @@ if __name__ == '__main__':
             scores.append(score)
             labels.append(label)
 
+        
         fpr, tpr, thresholds = roc_curve(labels, scores)
         plt.plot(fpr, tpr, label=name)
         print()

@@ -136,9 +136,9 @@ class ICSTrainer(LightningModule):
             self.loss_fns.append(partial(invariant_loss, invariants=self.invariants))
             self.loss_names.append("Invariant")
         if self.equations is not None:
-            
-            self.loss_fns.append(partial(equation_loss, equations=self.equations))
-            self.loss_names.append("Equation")
+            for i, equ in enumerate(self.equations):
+                self.loss_fns.append(partial(equation_loss, equations=[equ]))
+                self.loss_names.append(f"Equation {i}")
 
     def validation_step(self, batch, batch_idx):
         losses = self._compute_combine_losses(batch)

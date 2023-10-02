@@ -84,7 +84,7 @@ class ICSModel(nn.Module, abc.ABC):
                         if self.embedding_size > 0:
                             embedding = self.embeddings[embed_idx](in_.int())
                         else:
-                            embedding = F.one_hot(in_, num_classes=self.categorical_values[feature])
+                            embedding = F.one_hot(in_.long(), num_classes=self.categorical_values[feature])
                         new_batch[i, j, new_idx: new_idx + embedding.shape[-1]] = embedding
                         embed_idx += 1
                         new_idx += embedding.shape[-1]

@@ -41,14 +41,16 @@ class ARXEquation(Equation):
         input_total = self._compute_loss(input_states, self.input_idxs, self.input_coefficients)
         for idx in self.input_idxs:
             input_idx = self.continuous_idxs.index(idx)
-            input_total += self.input_coefficients[idx][0] * (input_states[:, -1, idx] +
-                                                              network_outputs[0][:, input_idx] - self.mean_values[idx])
+            input_total += self.input_coefficients[idx][0] * (network_outputs[0][:, input_idx] - self.mean_values[idx]
+                                                               + input_states[:, -1, idx] 
+                                                              )
 
         output_total = self._compute_loss(input_states, self.output_idxs, self.output_coefficients)
         for idx in self.output_idxs:
             output_idx = self.continuous_idxs.index(idx)
-            output_total += self.output_coefficients[idx][0] * (input_states[:, -1, idx] +
-                                                                network_outputs[0][:, output_idx] - self.mean_values[idx])
+            output_total += self.output_coefficients[idx][0] * (network_outputs[0][:, output_idx] - self.mean_values[idx]
+                                                                 + input_states[:, -1, idx] 
+                                                                )
 
         # check for actuator state
         target = self.target_state
