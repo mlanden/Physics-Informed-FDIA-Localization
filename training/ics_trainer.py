@@ -84,6 +84,7 @@ class ICSTrainer(LightningModule):
 
         self.losses = []
         self.states = []
+        self.targets = []
         self.batch_ids = []
         self.outputs = []
         self.attacks = []
@@ -170,6 +171,7 @@ class ICSTrainer(LightningModule):
             losses[i] = torch.mean(losses[i], dim=1).view(-1, 1)
         losses = torch.cat(losses, dim=1).detach()
         self.states.append(batch[0].cpu().detach())
+        self.targets.append(batch[2].cpu().detach())
         outs = []
         for out in self.recent_outputs:
             outs.append(out.cpu().detach())
@@ -202,14 +204,14 @@ class ICSTrainer(LightningModule):
             losses = self.all_gather(losses)
             losses = losses.view(losses.shape[0] * losses.shape[1], -1)
         if self.n_workers > 0 and (self.invariants is not None or self.equations is not None):
-            combined_outputs, states = self._prep_evaluate_invariants()
+            combined_outputs, states, targets = self._prep_evaluate_invariants()
             if self.global_rank == 0:
                 print(f"Evaluating losses with {self.n_workers} workers", flush=True)
                 losses = losses.cpu()
                 if self.invariants is not None:
-                    object_loss = evaluate_loss(self.invariants, states, combined_outputs, self.n_workers)
+                    object_loss = evaluate_loss(self.invariants, states, combined_outputs, targets, self.n_workers)
                 elif self.equations is not None:
-                    object_loss = evaluate_loss(self.equations, states, combined_outputs, self.n_workers)
+                    object_loss = evaluate_loss(self.equations, states, combined_outputs, targets, self.n_workers)
                 # object_loss = torch.mean(object_loss, dim=1).view(-1, 1)
                 losses = torch.concat([losses, object_loss], dim=1)
         torch.save(losses, self.normal_losses_path)
@@ -217,6 +219,7 @@ class ICSTrainer(LightningModule):
 
     def _prep_evaluate_invariants(self):
         states = torch.concat(self.states, dim=0)
+        targets = torch.concat(self.targets, dim=0)
         combined_outputs = []
         for i in range(len(self.outputs[0])):
             outs = [self.outputs[place][i].cpu().detach() for place in range(len(self.outputs))]
@@ -225,12 +228,14 @@ class ICSTrainer(LightningModule):
         if self.trainer.gpus != 1:
             states = self.all_gather(states)
             states = states.view(states.shape[0] * states.shape[1], states.shape[2], -1)
+            targets = self.all_gather(targets)
+            targets = targets.view(targets.shape[0] * targets.shape[1], -1)
             for i in range(len(combined_outputs)):
                 combined_outputs[i] = self.all_gather(combined_outputs[i])
                 combined_outputs[i] = combined_outputs[i].view(combined_outputs[i].shape[0] *
                                                                combined_outputs[i].shape[1], -1)
                 # print(i, combined_outputs[i].shape, flush=True)
-        return combined_outputs, states
+        return combined_outputs, states, targets
 
     def build_normal_profile(self, losses):
         print("Build normal profile", flush=True)
@@ -287,7 +292,7 @@ class ICSTrainer(LightningModule):
 
     def predict_step(self, batch, batch_idx, dataloader_idx=0):
         unscaled_seq, scaled_seq, targets, attacks, attaack_idks = batch
-        self.attacks.append(attacks.cpu().detach())
+        self.attacks.append(attacks.cpu().detach().to(torch.uint8))
         self.attack_idxs.append(attaack_idks.cpu().detach())
         if self.skip_test:
             return 0
@@ -297,6 +302,7 @@ class ICSTrainer(LightningModule):
     def on_predict_end(self):
         attacks = torch.concat(self.attacks, dim=0)
         attack_idxs = torch.concat(self.attack_idxs, dim=0)
+        print(attacks.shape, flush=True)
         if self.trainer.gpus != 1:
             attacks = self.all_gather(attacks)
             attack_idxs = self.all_gather(attack_idxs)
@@ -338,7 +344,6 @@ class ICSTrainer(LightningModule):
         elif self.profile_type == "mean":
             scores = torch.abs(losses - self.normal_means) / (self.normal_stds + eps)
             debug = []
-            # alarms = torch.any(scores > 7, dim=1)
             alarms = torch.max(scores, dim=1).values > 2.3
             for score, alarm, attack in zip(scores, alarms, attacks):
                 # if not alarm and attack:

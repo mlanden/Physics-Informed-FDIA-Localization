@@ -107,7 +107,7 @@ def find_normal_error():
                       accelerator="gpu" if torch.cuda.is_available() else "cpu",
                       )
 
-    dataset = get_dataset(conf, conf["data"]["normal"], True, True, 1)
+    dataset = get_dataset(conf, conf["data"]["normal"], True, True, conf["model"]["window_size"])
     
     model = ICSTrainer.load_from_checkpoint(checkpoint_to_load, conf=conf)
     print("Testing with", checkpoint_to_load)
@@ -123,6 +123,8 @@ def find_normal_error():
 
 def test():
     dataset = get_dataset(conf, conf["data"]["attack"], False, True, 1)
+    idx = list(range(1000))
+    # dataset = Subset(dataset, idx)
     type_ = conf["train"]["type"]
     if type_ == "prediction":
         trainer = Trainer(default_root_dir=checkpoint_dir,
@@ -271,9 +273,13 @@ if __name__ == '__main__':
     elif task == "equ_error":
         dataset = get_dataset(conf,conf["data"]["normal"], True, False, conf["model"]["window_size"])
         equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
+        losses = []
         for unscaled, scaled, target in dataset:
-            print(equations[0].evaluate(unscaled))
-            break
+            loss = equations[0].evaluate(unscaled)
+            # break
+            losses.append(loss)
+        print("Average loss:", np.mean(losses))
+        equations[0].loss_plot()
 
     else:
         raise RuntimeError(f"Unknown task: {task}")

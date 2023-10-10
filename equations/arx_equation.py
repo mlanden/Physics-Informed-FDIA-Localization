@@ -37,7 +37,7 @@ class ARXEquation(Equation):
 
         return abs(input_total - output_total) * is_target
 
-    def confidence_loss(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
+    def confidence_loss(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor], targets: torch.Tensor) -> torch.Tensor:
         input_total = self._compute_loss(input_states, self.input_idxs, self.input_coefficients)
         for idx in self.input_idxs:
             input_idx = self.continuous_idxs.index(idx)
@@ -56,7 +56,7 @@ class ARXEquation(Equation):
         target = self.target_state
         if self.categorical_features[self.actuator_idx] == 2:
             target -= 1
-        actuator_states = torch.argmax(network_outputs[self.categorical_idx + 1], dim=1)
+        actuator_states = targets[:, self.actuator_idx] # torch.argmax(network_outputs[self.categorical_idx + 1], dim=1)
         is_target = (actuator_states == target).float()
         return (input_total - output_total) ** 2 * is_target
 

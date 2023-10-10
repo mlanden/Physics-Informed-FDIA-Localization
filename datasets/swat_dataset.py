@@ -20,6 +20,7 @@ class SWATDataset(ICSDataset):
         self.features = self.data.iloc[start:, 1: -1].to_numpy().astype(np.float32)
         self.labels = self.data.iloc[start:, -1] == "Attack"
         self.labels = self.labels.to_numpy()
+        self.data_path = data_path
 
         self.make_sequences(load_scaler)
         print(f"Created {len(self.sequences)} sequences")

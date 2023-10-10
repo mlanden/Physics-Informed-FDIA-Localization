@@ -1,6 +1,6 @@
 task: train
-# task: error
-# task: test
+task: error
+task: test
 # task: "hyperparameter_optimize"
 # task: equations
 data:
@@ -17,8 +17,8 @@ model:
   n_layers: 1
   activation: tanh
   embedding_size: -1
-  sequence_length: 30
-  window_size: 20
+  sequence_length: 10
+  window_size: 8
   profile_type: mean
   #  profile_type: gmm
   dropout: 0
@@ -35,7 +35,7 @@ train:
   regularization: 0.0017
 #  regularization: 0.0053
   num_samples: 20
-  checkpoint: swat_long
+  checkpoint: swat_sensors
   # checkpoint: swat_autoencoder_equ
   checkpoint_dir: checkpoint
   load_checkpoint: 0
@@ -47,7 +47,7 @@ train:
   validate_fraction: 0.1
   find_error_fraction: 0.4
 #  validation_frequency: 1
-  loss: no  equation
+  loss: equation
   equation_name: swat
   max_gmm_components: 5
   distribution_threshold: 1.2

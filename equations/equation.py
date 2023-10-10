@@ -10,5 +10,5 @@ class Equation(ABC):
         pass
 
     @abstractmethod
-    def confidence_loss(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor]) -> torch.Tensor:
+    def confidence_loss(self, input_states: torch.Tensor, network_outputs: List[torch.Tensor], targets: torch.Tensor) -> torch.Tensor:
         pass

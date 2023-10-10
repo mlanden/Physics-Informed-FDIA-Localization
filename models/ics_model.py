@@ -31,15 +31,15 @@ class ICSModel(nn.Module, abc.ABC):
         for size in self.categorical_values.values():
             if self.embedding_size > 0:
                 self.embeddings.append(nn.Embedding(size, self.embedding_size))
-            self.classifications.append(nn.Linear(layer_size, size))
+            # self.classifications.append(nn.Linear(layer_size, size))
         self.output_linear = nn.Linear(layer_size, self.n_features - len(self.categorical_values))
 
     def outputs(self, out):
         continuous_outputs = self.output_linear(out)
         outputs = [continuous_outputs]
-        for layer in self.classifications:
-            output = layer(out)
-            outputs.append(output)
+        # for layer in self.classifications:
+        #     output = layer(out)
+        #     outputs.append(output)
 
         return outputs
         

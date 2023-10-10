@@ -1,4 +1,6 @@
+
 from collections import defaultdict
+import json
 from os import path
 import numpy as np
 import pandas as pd
@@ -23,6 +25,8 @@ class ICSDataset(ABC, Dataset):
         self.labels = None
         self.attack_idxs = None
         self.scaled_features = None
+        self.data_path = None
+        self.idx_to_attack = {}
         
     @abstractmethod
     def get_categorical_features(self) -> dict:
@@ -56,10 +60,7 @@ class ICSDataset(ABC, Dataset):
                 target = i + self.sequence_len - 1
             self.sequences.append(seq)
             self.targets.append(target)
-            attack = -1
-            for idx in attack_map:
-                if i in attack_map[idx]:
-                    attack = idx
+            attack = self.idx_to_attack[target]
             self.attack_idxs.append(attack)
             i += self.window_size
 
@@ -86,8 +87,14 @@ class ICSDataset(ABC, Dataset):
             if self.labels[i]:
                 is_attack = True
                 attack_map[attack_idx].append(i)
+                self.idx_to_attack[i] = attack_idx
+                
 
             elif not self.labels[i] and is_attack:
                 attack_idx += 1
                 is_attack = False
+            
+            if not self.labels[i]:
+                self.idx_to_attack[i] = -1
+            
         return attack_map

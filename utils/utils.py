@@ -29,7 +29,7 @@ def make_roc_curve(eval_file):
     plt.savefig("mean invarants.png")
 
 
-def evaluate_loss(loss_objects: List, states: torch.Tensor, outputs: List[List[torch.Tensor]],
+def evaluate_loss(loss_objects: List, states: torch.Tensor, outputs: List[List[torch.Tensor]], targets: torch.Tensor,
                   n_workers) -> torch.Tensor:
     if n_workers <= 0:
         raise RuntimeError("Cannot use multiprocessing for 0 worker")
@@ -43,7 +43,7 @@ def evaluate_loss(loss_objects: List, states: torch.Tensor, outputs: List[List[t
     print(f"Number of tasks: {tasks.qsize()}", flush=True)
     n_tasks = tasks.qsize()
 
-    workers = [mp.Process(target=_invariant_worker, args=(i, loss_objects, states, outputs, tasks, results,
+    workers = [mp.Process(target=_invariant_worker, args=(i, loss_objects, states, outputs, targets, tasks, results,
                                                           work_completed_events, stop_event)) for i in range(n_workers)]
     for worker in workers:
         worker.start()
@@ -72,14 +72,14 @@ def evaluate_loss(loss_objects: List, states: torch.Tensor, outputs: List[List[t
     return losses
 
 
-def _invariant_worker(rank: int, loss_objects: List, states: torch.Tensor, outputs: List[torch.Tensor],
+def _invariant_worker(rank: int, loss_objects: List, states: torch.Tensor, outputs: List[torch.Tensor], targets: torch.Tensor,
                       tasks: mp.JoinableQueue, results: mp.JoinableQueue, worker_end_events: List[mp.Event],
                       stop_event: mp.Event):
     while tasks.qsize() > 0:
         try:
             inv_id = tasks.get(timeout=0.1)
             invariant = loss_objects[inv_id]
-            confidence = invariant.confidence_loss(states, outputs)
+            confidence = invariant.confidence_loss(states, outputs, targets)
             results.put((inv_id, confidence))
             tasks.task_done()
         except queue.Empty:

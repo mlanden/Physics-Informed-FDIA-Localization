@@ -17,6 +17,7 @@ def prediction_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: to
     continuous_loss = nn.MSELoss(reduction="none")
     for i in range(batch.shape[-1]):
         if i in categorical_values:
+            continue
             # Cross entropy_loss
             logits = outputs[classification_idx + 1]
             target_class = target[:, i].long()
@@ -54,7 +55,7 @@ def equation_loss(batch: torch.Tensor, outputs: List[torch.Tensor], target: torc
                   equations: List[Equation]) -> torch.Tensor:
     loss = torch.zeros((len(equations), batch.shape[0]))
     for i, equation in enumerate(equations):
-        confidence_loss = equation.confidence_loss(batch, outputs)
+        confidence_loss = equation.confidence_loss(batch, outputs, target)
         loss[i, :] = confidence_loss
     loss = torch.t(loss)
     return loss
