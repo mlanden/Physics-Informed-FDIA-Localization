@@ -83,4 +83,6 @@ class RealPowerEquation(Equation):
         print("Fraction small:", small / len(self.bus_losses))
         print("average bus error:", np.mean(self.bus_losses))
         plt.hist(self.bus_losses)
+        plt.xlabel("Real Power Error per Bus")
+        plt.ylabel("Count")
         plt.savefig("Real_power_error.png")
