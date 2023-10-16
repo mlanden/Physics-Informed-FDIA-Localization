@@ -7,12 +7,14 @@ task: equ_error
 data:
   type: grid
   normal: ../data/grid/14_normal.csv
-  # normal: ../data/grid/14_small.csv
+  normal: ../data/grid/14_state.csv
+  normal: ../data/grid/118_state.csv
   # normal: ../data/grid/14_simple.csv
   attack: ../data/grid/14_attack.csv
   ybus: ../data/grid/14_ybus.csv
+  ybus: ../data/grid/118_ybus.csv
   n_features: 117
-  n_buses: 14  
+  n_buses: 118
 model:
   type: autoencoder
   # type: prediction
@@ -21,7 +23,7 @@ model:
   n_layers: 2
   activation: leakyRelu
   embedding_size: 10
-  sequence_length: 10
+  sequence_length: 1
   window_size: 1
   profile_type: mean
 #  profile_type: gmm

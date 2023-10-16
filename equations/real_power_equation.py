@@ -14,6 +14,7 @@ class RealPowerEquation(Equation):
     def __init__(self, n_buses, admittance_file) -> None:
         self.n_buses = n_buses
         self.admittance = pd.read_csv(admittance_file).fillna("").applymap(RealPowerEquation._to_complex)
+        print(self.admittance.shape)
         self.bus_losses = []
 
     @classmethod
@@ -24,6 +25,8 @@ class RealPowerEquation(Equation):
             s = s.replace(" ", "")
             if "j" in s:
                 s = s.replace("j", "") + "j"
+            s = s.replace("i", "j")
+
             return complex(s)
         
     def evaluate(self, states):
@@ -40,15 +43,15 @@ class RealPowerEquation(Equation):
                 j_base_idk = 6 * bus_j
                 v_j = states[-1, j_base_idk + V_IDX]
                 theta_j = states[-1, j_base_idk + THETA_IDX]
-
-                bus_power =  v_j * (self.admittance.iloc[bus_k, bus_j].real * np.cos(theta_k - theta_j)
-                                                                    + self.admittance.iloc[bus_k, bus_j].imag * np.sin(theta_k - theta_j))
+                radians = (np.pi / 180) * (theta_k - theta_j)
+                bus_power =  v_j * (self.admittance.iloc[bus_k, bus_j].real * np.cos(radians)
+                                                                    + self.admittance.iloc[bus_k, bus_j].imag * np.sin(radians))
                 bus_loss += bus_power
             bus_loss *= v_k
             bus_loss -= generator_mw_k
             bus_loss += load_mw_k
-            # print(bus_k, bus_loss)
-            self.bus_losses.append(bus_loss)
+            print(bus_k, bus_loss)
+            self.bus_losses.append(np.abs(bus_loss))
             loss += (bus_loss ** 2)
         # print(loss)
         return loss            
