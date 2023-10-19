@@ -273,9 +273,10 @@ if __name__ == '__main__':
     elif task == "equ_error":
         dataset = get_dataset(conf,conf["data"]["normal"], True, False, conf["model"]["window_size"])
         equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
+        features, labels = dataset.get_data()
         losses = []
-        for unscaled, scaled, target in dataset:
-            loss = equations[0].evaluate(unscaled)
+        for i in range(len(features)):
+            loss = equations[0].evaluate(features[i, :])
             # break
             losses.append(loss)
         print("Average loss:", np.mean(losses))
