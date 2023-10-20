@@ -1,6 +1,6 @@
-
 from .arx_equation import ARXEquation
 from .real_power_equation import RealPowerEquation
+from .reactive_power_equation import ReactivePowerEquation
 
 
 def build_equations(conf, categorical_idxs, continuous_idxs):
@@ -74,4 +74,5 @@ def build_equations(conf, categorical_idxs, continuous_idxs):
         n_buses = conf["data"]["n_buses"]
         admittance = conf["data"]["ybus"]
         equations.append(RealPowerEquation(n_buses, admittance))
+        equations.append(ReactivePowerEquation(n_buses, admittance))
     return equations

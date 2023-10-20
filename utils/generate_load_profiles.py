@@ -6,12 +6,12 @@ if __name__ == "__main__":
     name = "14"
     base_profile = f"../../data/grid/{name}_base.csv"
     base_data = pd.read_csv(base_profile)
-    n_profiles = 5000 // 3
+    n_profiles = 30000
     load_idxs = np.arange(len(base_data))
 
     for col in base_data:
         profiles = defaultdict(list)
-        for percent in [.1, .2, .3]:
+        for percent in [.3]:
             for i, load in enumerate(base_data[col]):
                 new_loads = np.random.normal(load, abs(percent * load), n_profiles)
                 profiles[i].extend(new_loads)

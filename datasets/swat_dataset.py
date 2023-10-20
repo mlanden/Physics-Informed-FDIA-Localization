@@ -17,6 +17,7 @@ class SWATDataset(ICSDataset):
             self.data = pd.read_csv(data_path, skiprows=0, header=1)
 
         start = START if train else 0
+        self.predict = conf["model"]["type"] == "prediction"
         self.features = self.data.iloc[start:, 1: -1].to_numpy().astype(np.float32)
         self.labels = self.data.iloc[start:, -1] == "Attack"
         self.labels = self.labels.to_numpy()

@@ -18,7 +18,6 @@ class ICSDataset(ABC, Dataset):
         self.sequence_len = conf["model"]["sequence_length"]
         self.window_size = window_size
         self.checkpoint = conf["train"]["checkpoint"]
-        self.predict = conf["model"]["type"] == "prediction"
         self.train = train
         self.scale_file = path.join("checkpoint", self.checkpoint, "scaler.gz")
         self.features = None

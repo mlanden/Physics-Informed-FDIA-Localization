@@ -9,7 +9,7 @@ from .ics_dataset import ICSDataset
 
 
 class GridDataset(ICSDataset):
-    def __init__(self, conf, data_path, window_size, train, load_scaler=False):
+    def __init__(self, conf, data_path, train, window_size=1):
         super().__init__(conf, window_size, train)
         self.data = pd.read_csv(data_path)
         self.mva_base = conf["data"]["mva_base"]
@@ -19,6 +19,7 @@ class GridDataset(ICSDataset):
         self.labels = self.data.iloc[:, -1] == "Yes"
         self.labels = self.labels.to_numpy()
         self._per_unit()
+        print(np.min(self.features), np.max(self.features))
 
         self.gen_load_mask = []
         self.voltage_mask = []
