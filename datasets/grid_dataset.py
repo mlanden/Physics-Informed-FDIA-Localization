@@ -1,9 +1,6 @@
-
-import joblib
 from os import path
 import numpy as np
 import pandas as pd
-from sklearn.preprocessing import StandardScaler, MinMaxScaler
 
 from .ics_dataset import ICSDataset
 
@@ -14,6 +11,7 @@ class GridDataset(ICSDataset):
         self.data = pd.read_csv(data_path)
         self.mva_base = conf["data"]["mva_base"]
         self.n_buses = conf["data"]["n_buses"]
+        self.powerworld = conf["data"]["powerworld"]
 
         self.features = self.data.iloc[:, 2: -1].to_numpy().astype(np.float32)
         self.labels = self.data.iloc[:, -1] == "Yes"
@@ -33,11 +31,22 @@ class GridDataset(ICSDataset):
 
     def _per_unit(self):
         for bus in range(self.n_buses):
-            bus_base_idx = 6 * bus
+            if self.powerworld:
+                bus_base_idx = 7 * bus
+            else:
+                bus_base_idx = 6 * bus
             for i in range(4):
                 self.features[:, bus_base_idx + i] = (self.features[:, bus_base_idx + i]
                     * 1e6) / (self.mva_base * 1e6)
-                
+            if self.powerworld:
+                nominal = self.features[:, bus_base_idx + 5]
+                actual = self.features[:, bus_base_idx + 6]
+                self.features[:, bus_base_idx + 5] = actual / nominal
+        if self.powerworld:
+            for bus in reversed(range(self.n_buses)):
+                volt_kv_idx = 7 * bus + 6
+                self.features = np.delete(self.features, volt_kv_idx, axis=1)
+
     def __len__(self):
         return len(self.features)
     
