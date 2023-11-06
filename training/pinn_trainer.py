@@ -222,8 +222,6 @@ class PINNTrainer:
         threshold = self.conf["model"]["threshold"]
         self.model.load_state_dict(checkpoint["model"])
         loader = self._init_ddp(rank, [datset], [False], "gloo")[0]
-
-        losses = []
         if rank == 0:
             data_loader = tqdm(loader)
         else:
@@ -232,9 +230,11 @@ class PINNTrainer:
         alarms = []
         attacks = []
         attack_idxs = []
+        max_idx = []
         for inputs, targets, attack_idx in data_loader:
             data_loss, physics_losss = self._compute_loss(inputs, targets)
             scores = (physics_losss - mean) / std
+            max_idx.append(torch.max(scores, dim=1).indices)
             alarm = torch.max(scores, dim=1).values > threshold
             attack = attack_idx != -1
             
@@ -246,6 +246,7 @@ class PINNTrainer:
         attacks = torch.cat(attacks)
         attack_idxs = torch.cat(attack_idxs)
 
+        print(max_idx)
         if rank == 0:
             all_alarms = [torch.empty_like(alarms) for _ in range(self.size)]
             all_attacks = [torch.empty_like(attacks) for _ in range(self.size)]

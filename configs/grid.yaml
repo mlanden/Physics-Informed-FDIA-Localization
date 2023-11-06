@@ -14,6 +14,7 @@ data:
   # normal: ../data/grid/14_simple.csv
   attack: ../data/grid/14_attack.csv
   attack: ../data/grid/14_state.csv
+  # attack: ../data/grid/14_line_1_out.csv
 
   ybus: ../data/grid/14_ybus.csv
   # ybus: ../data/grid/14_line_1_out_ybus.csv
