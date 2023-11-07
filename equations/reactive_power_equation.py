@@ -9,23 +9,12 @@ V_IDX = 3
 THETA_IDX = 2
 MVAR_IDX = 0
 class ReactivePowerEquation(Equation):
-    def __init__(self, n_buses, bus_num, admittance_file, bus_type_file) -> None:
+    def __init__(self, n_buses, bus_num, bus_type_file) -> None:
         self.n_buses = n_buses
         self.bus_num = bus_num
-        self.admittance = pd.read_csv(admittance_file).fillna("").map(ReactivePowerEquation._to_complex)
         self.bus_types = pd.read_csv(bus_type_file)
         self.bus_losses = []
-
-    @classmethod
-    def _to_complex(cls, s: str):
-        if len(s) == 0:
-            return complex(0)
-        else:
-            s = s.replace(" ", "")
-            if "j" in s:
-                s = s.replace("j", "") + "j"
-            s = s.replace("i", "j")
-            return complex(s)
+        self.ybus_base = 4 * self.n_buses + 2 * self.n_buses * self.bus_num
     
     def evaluate(self, states):
         k_base_idx = 4 * self.bus_num
@@ -39,8 +28,10 @@ class ReactivePowerEquation(Equation):
             v_j = states[j_base_idx + V_IDX]
             theta_j = states[j_base_idx + THETA_IDX]
             radians = (np.pi / 180) * (theta_k - theta_j)
-            bus_power = v_j * (self.admittance.iloc[self.bus_num, bus_j].real * np.sin(radians)
-                                - self.admittance.iloc[self.bus_num, bus_j].imag * np.cos(radians))
+            admittance_idx = self.ybus_base + 2 * bus_j
+
+            bus_power = v_j * (states[admittance_idx] * np.sin(radians)
+                                - states[admittance_idx + 1] * np.cos(radians))
             bus_loss += bus_power
         bus_loss *= v_k
         bus_loss -= power_k

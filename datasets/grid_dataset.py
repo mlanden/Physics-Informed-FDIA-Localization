@@ -14,10 +14,11 @@ class GridDataset(ICSDataset):
         self.n_buses = conf["data"]["n_buses"]
         self.powerworld = conf["data"]["powerworld"]
 
-        self.features = self.data.iloc[:, 2: -1].to_numpy().astype(np.float32)
+        self.features = self.data.iloc[:, 2: -1].to_numpy()
         self.labels = self.data.iloc[:, -1] == "Yes"
         self.labels = self.labels.to_numpy()
         self._per_unit()
+        self.features = self.features.astype(np.float32)
         print(np.min(self.features), np.max(self.features))
 
         self.input_mask = []
@@ -92,7 +93,21 @@ class GridDataset(ICSDataset):
         for bus in reversed(range(self.n_buses)):
             bus_idx = 6 * bus
             self.features = np.delete(self.features, bus_idx + 3, axis=1)
-            self.features = np.delete(self.features, bus_idx + 1, axis=1)
+            self.features = np.delete(self.features, bus_idx + 2, axis=1)
+        
+        # Y bus
+        for i in range(len(self.features)):
+            for pos in range(4 * self.n_buses, len(self.features[0])):
+                self.features[i, pos] = self._to_complex(self.features[i, pos])
+
+        extension = np.zeros((len(self.features), self.n_buses ** 2))
+        self.features = np.hstack((self.features, extension))
+        ybus_base = 4 * self.n_buses
+        for i in reversed(range(self.n_buses ** 2)):
+            for row in range(len(self.features)):
+                ybus = self.features[row, ybus_base + i]
+                self.features[row, ybus_base + 2 * i] = ybus.real
+                self.features[row, ybus_base + 2 * i + 1] = ybus.imag
 
     def __len__(self):
         return len(self.features)
@@ -111,3 +126,14 @@ class GridDataset(ICSDataset):
     
     def get_continuous_features(self):
         return list(range(len(self.features[0])))
+    
+    @classmethod
+    def _to_complex(cls, s: str):
+        if len(s) == 0:
+            return complex(0)
+        else:
+            s = s.replace(" ", "")
+            if "j" in s:
+                s = s.replace("j", "") + "j"
+            s = s.replace("i", "j")
+            return complex(s)

@@ -125,6 +125,7 @@ if __name__ == '__main__':
             for equ in equations:
                 loss = equ.evaluate(features[i, :])
                 # break
+                # quit()
                 losses.append(loss)
         print("States:", len(features))
         print("Average loss:", np.mean(losses))

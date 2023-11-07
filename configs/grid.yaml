@@ -3,11 +3,12 @@ task: error
 task: test
 # task: "hyperparameter_optimize"
 # task: equations
-# task: equ_error
+task: equ_error
 data:
   type: grid
   normal: ../data/grid/14_normal.csv
-  normal: ../data/grid/14_state.csv
+  # normal: ../data/grid/14_state.csv
+  normal: ../data/grid/14_continuous_admittance.csv
   # normal: ../data/grid/14_line_1_out.csv
   # normal: ../data/grid/14_powerworld.csv
   # normal: ../data/grid/118_state.csv
@@ -15,11 +16,6 @@ data:
   attack: ../data/grid/14_attack.csv
   attack: ../data/grid/14_state.csv
   # attack: ../data/grid/14_line_1_out.csv
-
-  ybus: ../data/grid/14_ybus.csv
-  # ybus: ../data/grid/14_line__out_ybus.csv
-  # ybus: ../data/grid/14_pw_ybus.csv
-  # ybus: ../data/grid/118_ybus.csv
   types: ../data/grid/14_types.csv
   n_buses: 14
   mva_base: 100
