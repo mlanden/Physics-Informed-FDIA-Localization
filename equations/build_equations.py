@@ -73,7 +73,8 @@ def build_equations(conf, categorical_idxs, continuous_idxs):
     elif dataset == "grid":
         n_buses = conf["data"]["n_buses"]
         admittance = conf["data"]["ybus"]
+        bus_types = conf["data"]["types"]
         for i in range(n_buses):
-            equations.append(RealPowerEquation(n_buses, i, admittance))
-            equations.append(ReactivePowerEquation(n_buses, i, admittance))
+            equations.append(RealPowerEquation(n_buses, i, admittance, bus_types))
+            equations.append(ReactivePowerEquation(n_buses, i, admittance, bus_types))
     return equations

@@ -26,7 +26,7 @@ class PINNTrainer:
         self.checkpoint_path = path.join(self.checkpoint_dir, "model.pt")
         self.size = self.conf["train"]["gpus"]
 
-        self.model = FCN(conf, 4 * self.n_buses, 2 * self.n_buses)
+        self.model = FCN(conf, 2 * self.n_buses, 2 * self.n_buses)
         self.equations = build_equations(conf, dataset.get_categorical_features(), 
                                          dataset.get_continuous_features())
         

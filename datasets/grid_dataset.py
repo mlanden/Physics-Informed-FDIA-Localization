@@ -9,6 +9,7 @@ class GridDataset(ICSDataset):
     def __init__(self, conf, data_path, train, window_size=1):
         super().__init__(conf, window_size, train)
         self.data = pd.read_csv(data_path)
+        self.types = pd.read_csv(conf["data"]["types"])
         self.mva_base = conf["data"]["mva_base"]
         self.n_buses = conf["data"]["n_buses"]
         self.powerworld = conf["data"]["powerworld"]
@@ -19,14 +20,45 @@ class GridDataset(ICSDataset):
         self._per_unit()
         print(np.min(self.features), np.max(self.features))
 
-        self.gen_load_mask = []
-        self.voltage_mask = []
+        self.input_mask = []
+        self.output_mask = []
         for bus in range(self.n_buses):
-            bus_base_idx = 6 * bus
-            for i in range(4):
-                self.gen_load_mask.append(bus_base_idx + i)
-            self.voltage_mask.append(bus_base_idx + 4)
-            self.voltage_mask.append(bus_base_idx + 5)
+            bus_base_idx = 4 * bus
+            bus_type = self.types.iloc[bus, 0]
+            if bus_type == 1:
+                # PQ
+                # reactive
+                self.input_mask.append(bus_base_idx)
+                # real
+                self.input_mask.append(bus_base_idx + 1)
+                # voltage angle
+                self.output_mask.append(bus_base_idx + 2)
+                # voltage mag
+                self.output_mask.append(bus_base_idx + 3)
+            elif bus_type == 2:
+                # PV 
+                # real
+                self.input_mask.append(bus_base_idx + 1)
+                # voltage mag
+                self.input_mask.append(bus_base_idx + 3)
+                # reactive 
+                self.output_mask.append(bus_base_idx)
+                # voltage angle
+                self.output_mask.append(bus_base_idx + 2)
+            elif bus_type == 3:
+                # Slack bus
+                # voltage angle 
+                self.input_mask.append(bus_base_idx + 2)
+                # voltage mag
+                self.input_mask.append(bus_base_idx + 3)
+                # reactive
+                self.output_mask.append(bus_base_idx)
+                # real
+                self.output_mask.append(bus_base_idx + 1)
+
+            else:
+                raise RuntimeError("Unknown bus type")
+            
         self.get_attack_map()
 
     def _per_unit(self):
@@ -46,14 +78,29 @@ class GridDataset(ICSDataset):
             for bus in reversed(range(self.n_buses)):
                 volt_kv_idx = 7 * bus + 6
                 self.features = np.delete(self.features, volt_kv_idx, axis=1)
+        
+        for bus in range(self.n_buses):
+            bus_idx = 6 * bus
+            gen_mvar = self.features[:, bus_idx]
+            load_mvar = self.features[:, bus_idx + 2]
+            self.features[:, bus_idx] = gen_mvar - load_mvar
+
+            gen_mw = self.features[:, bus_idx + 1]
+            load_mw = self.features[:, bus_idx + 3]
+            self.features[:, bus_idx + 1] = gen_mw - load_mw
+
+        for bus in reversed(range(self.n_buses)):
+            bus_idx = 6 * bus
+            self.features = np.delete(self.features, bus_idx + 3, axis=1)
+            self.features = np.delete(self.features, bus_idx + 1, axis=1)
 
     def __len__(self):
         return len(self.features)
     
     def __getitem__(self, item):
         feat = self.features[item]
-        inputs = feat[self.gen_load_mask]
-        targets = feat[self.voltage_mask]
+        inputs = feat[self.input_mask]
+        targets = feat[self.output_mask]
         if self.train:
             return inputs, targets
         else:
