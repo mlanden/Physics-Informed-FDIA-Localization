@@ -59,7 +59,7 @@ class GridDataset(ICSDataset):
 
             else:
                 raise RuntimeError("Unknown bus type")
-            
+        self.input_mask.extend(list(range(4 * self.n_buses, len(self.features[0]))))
         self.get_attack_map()
 
     def _per_unit(self):
@@ -98,7 +98,7 @@ class GridDataset(ICSDataset):
         # Y bus
         for i in range(len(self.features)):
             for pos in range(4 * self.n_buses, len(self.features[0])):
-                self.features[i, pos] = self._to_complex(self.features[i, pos])
+                self.features[i, pos] = self._to_complex(str(self.features[i, pos]))
 
         extension = np.zeros((len(self.features), self.n_buses ** 2))
         self.features = np.hstack((self.features, extension))

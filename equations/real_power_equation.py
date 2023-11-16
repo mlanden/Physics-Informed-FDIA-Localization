@@ -19,19 +19,19 @@ class RealPowerEquation(Equation):
     
     def evaluate(self, states):
         k_base_idx = 4 * self.bus_num
-        v_k = states[k_base_idx + V_IDX]
-        power_k = states[k_base_idx + MW_IDX]
-        theta_k = states[k_base_idx + THETA_IDX]
+        v_k = states[:, k_base_idx + V_IDX]
+        power_k = states[:, k_base_idx + MW_IDX]
+        theta_k = states[:, k_base_idx + THETA_IDX]
 
         bus_loss = 0
         for bus_j in range(self.n_buses):
             j_base_idk = 4 * bus_j
-            theta_j = states[j_base_idk + THETA_IDX]
-            v_j = states[j_base_idk + V_IDX]
+            theta_j = states[:, j_base_idk + THETA_IDX]
+            v_j = states[:, j_base_idk + V_IDX]
             radians = (np.pi / 180) * (theta_k - theta_j)
             admittance_idx = self.ybus_base + 2 * bus_j
-            bus_power =  v_j * (states[admittance_idx] * np.cos(radians)
-                                + states[admittance_idx + 1] * np.sin(radians))
+            bus_power =  v_j * (states[:, admittance_idx] * np.cos(radians)
+                                + states[:, admittance_idx + 1] * np.sin(radians))
             bus_loss += bus_power
         bus_loss *= v_k
         bus_loss -= power_k
@@ -40,9 +40,8 @@ class RealPowerEquation(Equation):
 
         
     def confidence_loss(self, input_states: torch.Tensor, network_outputs: torch.tensor, targets: torch.Tensor) -> torch.Tensor:
-        # Inputs : generation, loads
-        # Outputs : voltage magnitude and angle
         k_bus_idx = 2 * self.bus_num
+        ybus_base = 2 * self.n_buses + 2 * self.n_buses * self.bus_num
         bus_type = self.bus_types.iloc[self.bus_num, 0]
         if bus_type == 1:
             # PQ
@@ -58,7 +57,7 @@ class RealPowerEquation(Equation):
             power_k = network_outputs[:, k_bus_idx + 1] 
             theta_k = input_states[:, k_bus_idx]
             v_k = input_states[:, k_bus_idx + 1]
-        print(v_k)
+        
         bus_loss = 0
         for bus_j in range(self.n_buses):
             j_bus_idx = 2 * bus_j
@@ -76,17 +75,17 @@ class RealPowerEquation(Equation):
                 v_j = input_states[:, j_bus_idx + 1]
                 
             radians = (torch.pi / 180) * (theta_k - theta_j)
-
-            bus_power = torch.abs(v_j) * (self.admittance.iloc[self.bus_num, bus_j].real * torch.cos(radians)
-                                            + self.admittance.iloc[self.bus_num, bus_j].imag * torch.sin(radians))
+            admittance_idx = ybus_base + 2 * bus_j
+            bus_power = torch.abs(v_j) * (input_states[:, admittance_idx] * torch.cos(radians)
+                                            + input_states[:, admittance_idx + 1] * torch.sin(radians))
             bus_loss += bus_power
         bus_loss *= torch.abs(v_k)
         bus_loss -= power_k
         return bus_loss ** 2
     
     def loss_plot(self):
-        print(f"Average bus error, real power bus {self.bus_num}:", np.mean(self.bus_losses))
-        print("Std bus error", np.std(self.bus_losses))
+        self.bus_losses = np.concatenate(self.bus_losses)
+        print(f"Average bus error, real power bus {self.bus_num}:", np.mean(self.bus_losses), np.std(self.bus_losses))
         plt.hist(self.bus_losses)
         plt.xlabel("Real Power Error per Bus")
         plt.ylabel("Count")

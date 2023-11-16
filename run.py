@@ -121,12 +121,19 @@ if __name__ == '__main__':
         equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
         features, labels = dataset.get_data()
         losses = []
-        for i in range(len(features)):
+        start = 0
+        end = conf["train"]["batch_size"]
+        while start < len(features):
+            batch = features[start: end, :]
             for equ in equations:
-                loss = equ.evaluate(features[i, :])
-                # break
-                # quit()
+                loss = equ.evaluate(batch)
                 losses.append(loss)
+            
+            start = end
+            end += conf["train"]["batch_size"]
+            if end > len(features):
+                end = len(features)
+        losses = np.concatenate(losses)
         print("States:", len(features))
         print("Average loss:", np.mean(losses))
         for i in range(len(equations)):

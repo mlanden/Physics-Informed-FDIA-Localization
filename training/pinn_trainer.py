@@ -26,7 +26,7 @@ class PINNTrainer:
         self.checkpoint_path = path.join(self.checkpoint_dir, "model.pt")
         self.size = self.conf["train"]["gpus"]
 
-        self.model = FCN(conf, 2 * self.n_buses, 2 * self.n_buses)
+        self.model = FCN(conf, 2 * self.n_buses + 2 * self.n_buses ** 2, 2 * self.n_buses)
         self.equations = build_equations(conf, dataset.get_categorical_features(), 
                                          dataset.get_continuous_features())
         
@@ -97,6 +97,7 @@ class PINNTrainer:
                 loader = tqdm(train_loader, position=0, leave=True)
             else:
                 loader = train_loader
+            total_loss = 0
             for inputs, targets in loader:
                 inputs = inputs.to(device)
                 targets = targets.to(device)
@@ -104,7 +105,7 @@ class PINNTrainer:
                 data_loss, physics_loss, loss = self._combine_losses(inputs, targets)
                 loss.backward()
                 optim.step()
-
+                total_loss += loss.detach()
                 if rank == 0:
                     loader.set_description(f"Train Epoch [{epoch: 3d}/{epochs}]")
                     if self.use_physics:
@@ -112,6 +113,12 @@ class PINNTrainer:
                     else:
                         loader.set_postfix(loss=loss.item())
             
+            total_loss /= len(train_loader)
+            dist.all_reduce(total_loss)
+            total_loss /= self.size
+            if rank == 0:
+                tb_writer.add_scalar("Training loss", total_loss, epoch)
+
             val_loader.sampler.set_epoch(epoch)
             if rank == 0:
                 loader = tqdm(val_loader)
@@ -147,12 +154,13 @@ class PINNTrainer:
                 total_data_loss /= self.size
                 total_physics_loss /= self.size
                 total_loss /= self.size
+
                 scheduler.step(total_loss)
 
                 if rank == 0:
                     lr = optim.param_groups[0]['lr']
                     tb_writer.add_scalar("Learning Rate", lr, epoch)
-                    tb_writer.add_scalar("Loss", total_loss, epoch)
+                    tb_writer.add_scalar("Validation Loss", total_loss, epoch)
                     if self.use_physics:
                         tb_writer.add_scalar("Data loss", total_data_loss, epoch)
                         tb_writer.add_scalar("Physics loss", total_physics_loss, epoch)
@@ -241,12 +249,11 @@ class PINNTrainer:
             alarms.append(alarm)
             attacks.append(attack)
             attack_idxs.append(attack_idx)
-        
+        # print(max_idx)
         alarms = torch.cat(alarms)
         attacks = torch.cat(attacks)
         attack_idxs = torch.cat(attack_idxs)
 
-        print(max_idx)
         if rank == 0:
             all_alarms = [torch.empty_like(alarms) for _ in range(self.size)]
             all_attacks = [torch.empty_like(attacks) for _ in range(self.size)]
@@ -266,8 +273,6 @@ class PINNTrainer:
         dist.barrier()
 
     def _compute_stats(self, alarms, attacks, attack_idxs):
-        print(alarms.size(), alarms[0])
-        print(attacks.size(), attacks[0])
         cm = confusion_matrix(attacks, alarms)
         tp = cm[1][1]
         fp = cm[0][1]
@@ -299,7 +304,8 @@ class PINNTrainer:
 
     def _compute_loss(self, inputs, targets):
         predicted = self.model(inputs)
-        data_loss = torch.zeros_like(inputs) # F.mse_loss(predicted, targets, reduction='none')
+        # data_loss = F.mse_loss(predicted, targets, reduction='none')
+        data_loss = torch.zeros_like(inputs)
 
         physics_loss = torch.zeros((len(inputs), len(self.equations)), device=inputs.device)
         if self.use_physics:

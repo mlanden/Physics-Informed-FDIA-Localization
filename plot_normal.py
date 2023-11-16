@@ -1,7 +1,8 @@
 import matplotlib.pyplot as plt
 import torch
 
-profile_path = "./checkpoint/swat_equ_mse/normal_mean.pt"
+checkpoint = "grid_14_continuous"
+profile_path = f"./checkpoint/{checkpoint}/model.pt"
 profile = torch.load(profile_path)
 mean = profile["mean"].numpy()
 print(mean)
