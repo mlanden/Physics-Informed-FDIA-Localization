@@ -4,13 +4,14 @@ import ray
 from sklearn.metrics import confusion_matrix
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
+from torch_geometric.data import DataLoader as gDataLoader
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 from ray.air import Checkpoint, session
 from tqdm import tqdm
 
-from models import FCN
+from models import FCN, GCN
 from equations import build_equations
 
 class PINNTrainer:
@@ -20,13 +21,17 @@ class PINNTrainer:
         self.batch_size = conf["train"]["batch_size"]
         self.scale = conf["train"]["scale"]
         self.use_physics = conf["train"]["physics"]
+        self.use_graph = conf["model"]["graph"]
 
         self.n_buses = conf["data"]["n_buses"]
         self.checkpoint_dir = path.join(conf["train"]["checkpoint_dir"], conf["train"]["checkpoint"])
         self.checkpoint_path = path.join(self.checkpoint_dir, "model.pt")
         self.size = self.conf["train"]["gpus"]
 
-        self.model = FCN(conf, 2 * self.n_buses + 2 * self.n_buses ** 2, 2 * self.n_buses)
+        if self.use_graph:
+            self.model = GCN(conf, 4, 2)
+        else:
+            self.model = FCN(conf, 2 * self.n_buses + 2 * self.n_buses ** 2, 2 * self.n_buses)
         self.equations = build_equations(conf, dataset.get_categorical_features(), 
                                          dataset.get_continuous_features())
         
@@ -46,10 +51,16 @@ class PINNTrainer:
                                          num_replicas=self.size,
                                          rank=rank,
                                          shuffle=shuffle)
-            loader = DataLoader(dataset,
-                                batch_size=self.batch_size,
-                                shuffle=False,
-                                sampler=sampler)
+            if self.use_graph:
+                loader = gDataLoader(dataset,
+                                   batch_size=self.batch_size,
+                                   shuffle=False,
+                                   sampler=sampler)
+            else:
+                loader = DataLoader(dataset,
+                                    batch_size=self.batch_size,
+                                    shuffle=False,
+                                    sampler=sampler)
             loaders.append(loader)
         return loaders
 
@@ -98,10 +109,16 @@ class PINNTrainer:
             else:
                 loader = train_loader
             total_loss = 0
-            for inputs, targets in loader:
-                inputs = inputs.to(device)
-                targets = targets.to(device)
+            for data in loader:
                 optim.zero_grad()
+                if not self.use_graph:
+                    inputs, targets = data
+                    inputs = inputs.to(device)
+                    targets = targets.to(device)
+                else:
+                    data = data.to(device)
+                    inputs = (data.x, data.edge_index)
+                    targets = data.y
                 data_loss, physics_loss, loss = self._combine_losses(inputs, targets)
                 loss.backward()
                 optim.step()
@@ -129,9 +146,15 @@ class PINNTrainer:
                 total_data_loss = 0
                 total_physics_loss = 0
                 total_loss = 0
-                for inputs, targets in loader:
-                    inputs = inputs.to(device)
-                    targets = targets.to(device)
+                for data in loader:
+                    if not self.use_graph:
+                        inputs, targets = data
+                        inputs = inputs.to(device)
+                        targets = targets.to(device)
+                    else:
+                        data = data.to(device)
+                        inputs = (data.x, data.edge_index)
+                        targets = data.y
                     data_loss, physics_loss, loss = self._combine_losses(inputs, targets)
                     total_data_loss += data_loss
                     total_physics_loss += physics_loss
@@ -197,9 +220,9 @@ class PINNTrainer:
 
         for inputs, targets in data_loader:
             data_loss, physics_loss = self._compute_loss(inputs, targets)
-            # data_loss = data_loss.mean(dim=1).view(-1, 1)
-            # loss = torch.cat([data_loss, physics_loss], dim=1)
-            losses.append(physics_loss)
+            data_loss = data_loss.mean(dim=1).view(-1, 1)
+            loss = torch.cat([data_loss, physics_loss], dim=1)
+            losses.append(loss)
         loss = torch.cat(losses)
 
         if rank == 0:
@@ -240,8 +263,10 @@ class PINNTrainer:
         attack_idxs = []
         max_idx = []
         for inputs, targets, attack_idx in data_loader:
-            data_loss, physics_losss = self._compute_loss(inputs, targets)
-            scores = (physics_losss - mean) / std
+            data_loss, physics_loss = self._compute_loss(inputs, targets)
+            data_loss = data_loss.mean(dim=1).view(-1, 1)
+            loss = torch.cat([data_loss, physics_loss], dim=1)
+            scores = (loss - mean) / std
             max_idx.append(torch.max(scores, dim=1).indices)
             alarm = torch.max(scores, dim=1).values > threshold
             attack = attack_idx != -1
@@ -304,10 +329,11 @@ class PINNTrainer:
 
     def _compute_loss(self, inputs, targets):
         predicted = self.model(inputs)
-        # data_loss = F.mse_loss(predicted, targets, reduction='none')
-        data_loss = torch.zeros_like(inputs)
+        data_loss = F.mse_loss(predicted, targets, reduction='none')
+        # data_loss = torch.zeros_like(targets)
 
-        physics_loss = torch.zeros((len(inputs), len(self.equations)), device=inputs.device)
+        physics_loss = torch.zeros((len(inputs), len(self.equations)), 
+                                   device=predicted.device)
         if self.use_physics:
             for i, equation in enumerate(self.equations):
                 physics_loss[:, i] = equation.confidence_loss(inputs, predicted, targets)

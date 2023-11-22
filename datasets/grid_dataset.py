@@ -3,6 +3,7 @@ import numpy as np
 import pandas as pd
 
 from .ics_dataset import ICSDataset
+from utils import to_complex
 
 
 class GridDataset(ICSDataset):
@@ -98,7 +99,7 @@ class GridDataset(ICSDataset):
         # Y bus
         for i in range(len(self.features)):
             for pos in range(4 * self.n_buses, len(self.features[0])):
-                self.features[i, pos] = self._to_complex(str(self.features[i, pos]))
+                self.features[i, pos] = to_complex(str(self.features[i, pos]))
 
         extension = np.zeros((len(self.features), self.n_buses ** 2))
         self.features = np.hstack((self.features, extension))
@@ -126,14 +127,3 @@ class GridDataset(ICSDataset):
     
     def get_continuous_features(self):
         return list(range(len(self.features[0])))
-    
-    @classmethod
-    def _to_complex(cls, s: str):
-        if len(s) == 0:
-            return complex(0)
-        else:
-            s = s.replace(" ", "")
-            if "j" in s:
-                s = s.replace("j", "") + "j"
-            s = s.replace("i", "j")
-            return complex(s)

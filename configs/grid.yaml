@@ -7,15 +7,14 @@ task: train
 data:
   type: grid
   normal: ../data/grid/14_normal.csv
-  # normal: ../data/grid/14_state.csv
-  normal: ../data/grid/14_continuous_admittance.csv
+  # normal: ../data/grid/14_continuous_admittance.csv
   # normal: ../data/grid/14_line_1_out.csv
   # normal: ../data/grid/14_powerworld.csv
   # normal: ../data/grid/118_state.csv
   # normal: ../data/grid/14_simple.csv
   attack: ../data/grid/14_attack.csv
   attack: ../data/grid/14_normal.csv
-  # attack: ../data/grid/14_continuous_admittance.csv
+  attack: ../data/grid/14_continuous_admittance.csv
   # attack: ../data/grid/14_line_1_out.csv
   types: ../data/grid/14_types.csv
   n_buses: 14
@@ -25,21 +24,22 @@ data:
 model:
   hidden_size: 100
   layer_sizes: [40, 20, 10]
-  n_layers: 4
+  n_layers: 6
   sequence_length: 10
   activation: relu
   profile_type: mean
 #  profile_type: gmm
   dropout: 0
   threshold: 2.5
+  graph: 0
 train:
   cuda: 1
-  gpus: 4
+  gpus: 1
   nodes: 1
   batch_size: 64
   epochs: 200
-  lr: 0.1
-  scale: [001, 1]
+  lr: 0.05
+  scale: [0.1, 1]
   regularization: 0.001
   num_samples: 20
   checkpoint: grid_14_continuous
@@ -50,4 +50,4 @@ train:
   validate_fraction: 0.25
   find_error_fraction: 0.25
   equation_name: grid
-  physics: 1
+  physics: 0

@@ -3,15 +3,17 @@ from sched import scheduler
 import sys
 from os import path
 from pprint import pprint
+from sympy import use
 import yaml
 
-from torch.utils.data import Subset, DataLoader
+from torch.utils.data import Subset
 import torch.multiprocessing as mp
 import numpy as np
 from ray import tune, air
 from ray.tune import CLIReporter
 from ray.tune.schedulers import ASHAScheduler
-from datasets import GridDataset
+
+from datasets import GridDataset, GridGraphDataset
 from training import PINNTrainer
 from equations import build_equations
 
@@ -20,7 +22,10 @@ def train(config=None):
     if config is not None:
         conf["model"]["n_layers"] = config["n_layers"]
         conf["model"]["hidden_size"] = config["size"]
-    dataset = GridDataset(conf, conf["data"]["normal"], True)
+    if use_graph:
+        dataset = GridGraphDataset(conf, conf["data"]["normal"], True)
+    else:
+        dataset = GridDataset(conf, conf["data"]["normal"], True)
     datalen = len(dataset)
     train_len = int(datalen * train_fraction)
     train_idx = list(range(train_len))
@@ -107,6 +112,7 @@ if __name__ == '__main__':
     validate_fraction = conf["train"]["validate_fraction"]
     find_error_fraction = conf["train"]["find_error_fraction"]
     gpus = conf["train"]["gpus"]
+    use_graph = conf["model"]["graph"]
 
     if task == "train":
         train()
