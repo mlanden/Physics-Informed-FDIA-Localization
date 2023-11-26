@@ -16,6 +16,7 @@ class GridGraphDataset(InMemoryDataset):
         
         data = pd.read_csv(data_path)
         self.types = pd.read_csv(conf["data"]["types"])
+        self.standard_topology = pd.read_csv(conf["data"]["ybus"]).map(to_complex)
         self.mva_base = conf["data"]["mva_base"]
         self.n_buses = conf["data"]["n_buses"]
         self.powerworld = conf["data"]["powerworld"]
@@ -143,8 +144,8 @@ class GridGraphDataset(InMemoryDataset):
             i = 0
             j = 0
             for pos in range(4 * self.n_buses, len(self.features[graph]), 2):
-                if( i != j) and (self.features[graph, pos] > 0 or 
-                                 self.features[graph, pos + 1] > 0):
+                if( i != j) and (self.standard_topology.iloc[i, j].real > 0 or 
+                                 self.standard_topology.iloc[i, j].imag > 0):
                     sources.append(i)
                     targets.append(j)
                     edge_features.append(self.features[graph, pos: pos + 2])

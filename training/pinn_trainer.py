@@ -4,7 +4,7 @@ import ray
 from sklearn.metrics import confusion_matrix
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
-from torch_geometric.data import DataLoader as gDataLoader
+from torch_geometric.loader import DataLoader as gDataLoader
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
@@ -117,7 +117,7 @@ class PINNTrainer:
                     targets = targets.to(device)
                 else:
                     data = data.to(device)
-                    inputs = (data.x, data.edge_index)
+                    inputs = data
                     targets = data.y
                 data_loss, physics_loss, loss = self._combine_losses(inputs, targets)
                 loss.backward()
@@ -153,7 +153,7 @@ class PINNTrainer:
                         targets = targets.to(device)
                     else:
                         data = data.to(device)
-                        inputs = (data.x, data.edge_index)
+                        inputs = data
                         targets = data.y
                     data_loss, physics_loss, loss = self._combine_losses(inputs, targets)
                     total_data_loss += data_loss
@@ -331,7 +331,6 @@ class PINNTrainer:
         predicted = self.model(inputs)
         data_loss = F.mse_loss(predicted, targets, reduction='none')
         # data_loss = torch.zeros_like(targets)
-
         physics_loss = torch.zeros((len(inputs), len(self.equations)), 
                                    device=predicted.device)
         if self.use_physics:

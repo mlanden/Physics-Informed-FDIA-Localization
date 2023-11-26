@@ -1,7 +1,7 @@
 from .arx_equation import ARXEquation
 from .real_power_equation import RealPowerEquation
 from .reactive_power_equation import ReactivePowerEquation
-
+from .real_power_graph_equation import RealPowerGraphEquation
 
 def build_equations(conf, categorical_idxs, continuous_idxs):
     dataset = conf["data"]["type"]
@@ -73,7 +73,12 @@ def build_equations(conf, categorical_idxs, continuous_idxs):
     elif dataset == "grid":
         n_buses = conf["data"]["n_buses"]
         bus_types = conf["data"]["types"]
-        for i in range(n_buses):
-            equations.append(RealPowerEquation(n_buses, i, bus_types))
-            equations.append(ReactivePowerEquation(n_buses, i, bus_types))
+        graph = conf["model"]["graph"]
+        if graph:
+            for i in range(n_buses):
+                equations.append(RealPowerGraphEquation(n_buses, i, bus_types))
+        else:
+            for i in range(n_buses):
+                equations.append(RealPowerEquation(n_buses, i, bus_types))
+                equations.append(ReactivePowerEquation(n_buses, i, bus_types))
     return equations

@@ -4,9 +4,11 @@ import sys
 from os import path
 from pprint import pprint
 from sympy import use
+import torch
 import yaml
 
 from torch.utils.data import Subset
+from torch_geometric.loader import DataLoader
 import torch.multiprocessing as mp
 import numpy as np
 from ray import tune, air
@@ -42,7 +44,10 @@ def train(config=None):
              join=True)
     
 def get_normal_profile():
-    dataset = GridDataset(conf, conf["data"]["normal"], True)
+    if use_graph:
+        dataset = GridGraphDataset(conf, conf["data"]["normal"], True)
+    else:
+        dataset = GridDataset(conf, conf["data"]["normal"], True)
     start = int((train_fraction + validate_fraction) * len(dataset))
     size = int(find_error_fraction * len(dataset))
     idx = list(range(start, start + size))
@@ -123,26 +128,38 @@ if __name__ == '__main__':
     elif task == "hyperparameter_optimize":
         hyperparameter_optimize()
     elif task == "equ_error":
-        dataset = GridDataset(conf, conf["data"]["normal"], True)
-        equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
-        features, labels = dataset.get_data()
         losses = []
-        start = 0
-        end = conf["train"]["batch_size"]
-        while start < len(features):
-            batch = features[start: end, :]
-            for equ in equations:
-                loss = equ.evaluate(batch)
-                losses.append(loss)
-            
-            start = end
-            end += conf["train"]["batch_size"]
-            if end > len(features):
-                end = len(features)
-        losses = np.concatenate(losses)
-        print("States:", len(features))
-        print("Average loss:", np.mean(losses))
-        for i in range(len(equations)):
-            equations[i].loss_plot()
+        if use_graph:
+            dataset = GridGraphDataset(conf, conf["data"]["normal"], True)
+            equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
+            loader = DataLoader(dataset, batch_size=conf["train"]["batch_size"])
+            for batch in loader:
+                for equ in equations:
+                    loss = equ.evaluate(batch)
+                    losses.append(loss)
+            loss = torch.cat(losses)
+            print("average loss:", torch.mean(loss))
+            print("Standard dev:", torch.std(loss))
+        else:
+            dataset = GridDataset(conf, conf["data"]["normal"], True)
+            equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
+            features, labels = dataset.get_data()
+            start = 0
+            end = conf["train"]["batch_size"]
+            while start < len(features):
+                batch = features[start: end, :]
+                for equ in equations:
+                    loss = equ.evaluate(batch)
+                    losses.append(loss)
+                
+                start = end
+                end += conf["train"]["batch_size"]
+                if end > len(features):
+                    end = len(features)
+            losses = np.concatenate(losses)
+            print("States:", len(features))
+            print("Average loss:", np.mean(losses))
+            for i in range(len(equations)):
+                equations[i].loss_plot()
     else:
         raise RuntimeError("Unknown task")

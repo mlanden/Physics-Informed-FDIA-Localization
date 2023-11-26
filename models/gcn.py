@@ -11,8 +11,9 @@ class GCN(nn.Module):
         self.conv1 = gnn.GCNConv(n_inputs, self.hidden_size)
         self.conv2 = gnn.GCNConv(self.hidden_size, 2)
 
-    def forward(self, ins):
-        x, edge_index = ins
+    def forward(self, data):
+        x = data.x
+        edge_index = data.edge_index
         h = self.conv1(x, edge_index)
         h = h.relu()
         h = self.conv2(h, edge_index)
