@@ -35,10 +35,13 @@ class PINNTrainer:
         self.equations = build_equations(conf, dataset.get_categorical_features(), 
                                          dataset.get_continuous_features())
         
-    def _init_ddp(self, rank, datasets, shuffles, backend="nccl"):
+    def _init_ddp(self, rank, datasets, shuffles):
         os.environ['MASTER_ADDR'] = '127.0.0.1'
         os.environ['MASTER_PORT'] = '29500'
-        
+        if self.conf["train"]["cuda"]:
+            backend = "nccl"
+        else:
+            backend = "gloo"
         dist.init_process_group(backend, rank=rank, world_size=self.size)
         if backend == "gloo":
             self.model = torch.nn.parallel.DistributedDataParallel(self.model)
@@ -89,10 +92,7 @@ class PINNTrainer:
 
         if rank == 0:
             print(self.model)
-        if self.conf["train"]["cuda"]:
-            train_loader, val_loader = self._init_ddp(rank, [train_dataset, val_dataset], [True, False])
-        else:
-            train_loader, val_loader = self._init_ddp(rank, [train_dataset, val_dataset], [True, False], "gloo")
+        train_loader, val_loader = self._init_ddp(rank, [train_dataset, val_dataset], [True, False])
         epochs = self.conf["train"]["epochs"]
 
         if rank == 0:
@@ -208,9 +208,12 @@ class PINNTrainer:
             if rank == 0:
                 print("Checpoint does not exist")
             return
+        device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         checkpoint = torch.load(self.checkpoint_path)
         self.model.load_state_dict(checkpoint["model"])
-        loader = self._init_ddp(rank, [dataset], [False], "gloo")[0]
+        if rank == 0:
+            print(self.model)
+        loader = self._init_ddp(rank, [dataset], [False])[0]
 
         losses = []
         if rank == 0:
@@ -218,7 +221,15 @@ class PINNTrainer:
         else:
             data_loader = loader
 
-        for inputs, targets in data_loader:
+        for data in data_loader:
+            if self.use_graph:
+                data = data.to(device)
+                inputs = data
+                targets = data.y
+            else:
+                inputs, targets = data
+                inputs = inputs.to(device)
+                targets = targets.to(device)
             data_loss, physics_loss = self._compute_loss(inputs, targets)
             data_loss = data_loss.mean(dim=1).view(-1, 1)
             loss = torch.cat([data_loss, physics_loss], dim=1)
@@ -247,12 +258,13 @@ class PINNTrainer:
                 print("Checkpoint does not exist")
             return
         
+        device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         checkpoint = torch.load(self.checkpoint_path)
         mean = checkpoint["mean"]
         std = checkpoint["std"]
         threshold = self.conf["model"]["threshold"]
         self.model.load_state_dict(checkpoint["model"])
-        loader = self._init_ddp(rank, [datset], [False], "gloo")[0]
+        loader = self._init_ddp(rank, [datset], [False])[0]
         if rank == 0:
             data_loader = tqdm(loader)
         else:
@@ -262,7 +274,15 @@ class PINNTrainer:
         attacks = []
         attack_idxs = []
         max_idx = []
-        for inputs, targets, attack_idx in data_loader:
+        for data in data_loader:
+            if not self.use_graph:
+                inputs, targets = data
+                inputs = inputs.to(device)
+                targets = targets.to(device)
+            else:
+                data = data.to(device)
+                inputs = data
+                targets = data.y
             data_loss, physics_loss = self._compute_loss(inputs, targets)
             data_loss = data_loss.mean(dim=1).view(-1, 1)
             loss = torch.cat([data_loss, physics_loss], dim=1)
@@ -331,10 +351,12 @@ class PINNTrainer:
         predicted = self.model(inputs)
         data_loss = F.mse_loss(predicted, targets, reduction='none')
         # data_loss = torch.zeros_like(targets)
+
         physics_loss = torch.zeros((len(inputs), len(self.equations)), 
                                    device=predicted.device)
         if self.use_physics:
             for i, equation in enumerate(self.equations):
                 physics_loss[:, i] = equation.confidence_loss(inputs, predicted, targets)
-
+        if self.use_graph:
+            data_loss = data_loss.view(physics_loss.size(0), -1)
         return data_loss, physics_loss

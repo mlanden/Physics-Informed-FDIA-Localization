@@ -2,6 +2,7 @@ from .arx_equation import ARXEquation
 from .real_power_equation import RealPowerEquation
 from .reactive_power_equation import ReactivePowerEquation
 from .real_power_graph_equation import RealPowerGraphEquation
+from .reactive_power_graph_equation import ReactivePowerGrapghEquation
 
 def build_equations(conf, categorical_idxs, continuous_idxs):
     dataset = conf["data"]["type"]
@@ -77,6 +78,7 @@ def build_equations(conf, categorical_idxs, continuous_idxs):
         if graph:
             for i in range(n_buses):
                 equations.append(RealPowerGraphEquation(n_buses, i, bus_types))
+                equations.append(ReactivePowerGrapghEquation(n_buses, i, bus_types))
         else:
             for i in range(n_buses):
                 equations.append(RealPowerEquation(n_buses, i, bus_types))

@@ -52,6 +52,7 @@ def get_normal_profile():
     size = int(find_error_fraction * len(dataset))
     idx = list(range(start, start + size))
     normal = Subset(dataset, idx)
+    print("Normal data size:", len(normal))
 
     trainer = PINNTrainer(conf, dataset)
     mp.spawn(trainer.create_normal_profile, args=[normal],

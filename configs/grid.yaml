@@ -3,11 +3,11 @@ task: train
 # task: test
 # task: "hyperparameter_optimize"
 # task: equations
-task: equ_error
+# task: equ_error
 data:
   type: grid
   normal: ../data/grid/14_normal.csv
-  # normal: ../data/grid/14_continuous_admittance.csv
+  normal: ../data/grid/14_continuous_admittance.csv
   # normal: ../data/grid/14_line_1_out.csv
   # normal: ../data/grid/14_powerworld.csv
   # normal: ../data/grid/118_state.csv
@@ -23,7 +23,7 @@ data:
   powerworld: 0
   
 model:
-  hidden_size: 100
+  hidden_size: 20
   layer_sizes: [40, 20, 10]
   n_layers: 6
   sequence_length: 10
@@ -33,12 +33,13 @@ model:
   dropout: 0
   threshold: 2.5
   graph: 1
+  n_heads: 3
 train:
-  cuda: 1
-  gpus: 1
+  cuda: 0
+  gpus: 4
   nodes: 1
-  batch_size: 6
-  epochs: 200
+  batch_size: 64
+  epochs: 800
   lr: 0.05
   scale: [0.1, 1]
   regularization: 0.001
