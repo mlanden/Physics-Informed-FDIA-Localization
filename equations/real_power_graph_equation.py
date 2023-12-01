@@ -52,11 +52,6 @@ class RealPowerGraphEquation(Equation):
                 v_j = graph.x[targets, 1]
             radians = (torch.pi / 180) * (theta_k - theta_j)
             bus_loss += v_j * (gs * torch.cos(radians) + bs * torch.sin(radians))
-
-        gs = graph.x[node_idxs, -2]
-        bs = graph.x[node_idxs, -1]
-        radians = (torch.pi / 180) * (theta_k - theta_k)
-        bus_loss += v_k * (gs * torch.cos(radians) + bs * torch.sin(radians))
         bus_loss *= v_k
         bus_loss -= power_k
         return bus_loss ** 2
@@ -97,11 +92,6 @@ class RealPowerGraphEquation(Equation):
                 v_j = input_graph.x[targets, 1]
             radians = (torch.pi / 180) * (theta_k - theta_j)
             bus_loss += v_j * (gs * torch.cos(radians) + bs * torch.sin(radians))
-
-        gs = input_graph.x[node_idxs, -2]
-        bs = input_graph.x[node_idxs, -1]
-        radians = (torch.pi / 180) * (theta_k - theta_k)
-        bus_loss += v_k *(gs * torch.cos(radians) + bs * torch.sin(radians))
         bus_loss *= v_k
         bus_loss -= power_k
         return bus_loss ** 2

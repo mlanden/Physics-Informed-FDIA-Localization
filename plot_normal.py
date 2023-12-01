@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import torch
 
-checkpoint = "grid_14_gnn"
+checkpoint = "grid_14_reduction_lr"
 profile_path = f"./checkpoint/{checkpoint}/model.pt"
 profile = torch.load(profile_path)
 mean = profile["mean"].numpy()

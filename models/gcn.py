@@ -1,4 +1,3 @@
-import torch
 import torch.nn.functional as F
 import torch.nn as nn
 import torch_geometric.nn as gnn
@@ -10,7 +9,8 @@ class GCN(nn.Module):
         self.hidden_size = conf["model"]["hidden_size"]
         self.n_heads = conf["model"]["n_heads"]
         self.conv1 = gnn.GATConv(n_inputs, self.hidden_size, self.n_heads)
-        self.conv2 = gnn.GATConv(self.hidden_size * self.n_heads, 2)
+        self.conv2 = gnn.GATConv(self.hidden_size * self.n_heads, self.hidden_size,
+                                  self.n_heads, concat=False)
 
     def forward(self, data):
         x = data.x

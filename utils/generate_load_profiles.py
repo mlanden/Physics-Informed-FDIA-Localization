@@ -6,7 +6,7 @@ if __name__ == "__main__":
     name = "14"
     base_profile = f"../../data/grid/{name}_base.csv"
     base_data = pd.read_csv(base_profile)
-    n_profiles = 500000
+    n_profiles = 600000
     load_idxs = np.arange(len(base_data))
 
     for col in base_data:

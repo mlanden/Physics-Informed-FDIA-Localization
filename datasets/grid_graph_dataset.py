@@ -140,23 +140,18 @@ class GridGraphDataset(InMemoryDataset):
             sources = []
             targets = []
             edge_features = []
-            node_ybus = []
             i = 0
             j = 0
             for pos in range(4 * self.n_buses, len(self.features[graph]), 2):
-                if( i != j) and (self.standard_topology.iloc[i, j].real != 0 or 
-                                 self.standard_topology.iloc[i, j].imag != 0):
+                if (self.standard_topology.iloc[i, j].real != 0 or 
+                        self.standard_topology.iloc[i, j].imag != 0):
                     sources.append(i)
                     targets.append(j)
                     edge_features.append(self.features[graph, pos: pos + 2])
-                elif i == j:
-                    node_ybus.append(self.features[graph, pos: pos + 2])
                 j += 1
                 if j == self.n_buses:
                     j = 0
                     i += 1
-            node_ybus = np.vstack(node_ybus)
-            nodes = np.hstack((nodes, node_ybus))
             edge_index = torch.tensor([sources, targets], dtype=torch.long)
             targets = self.features[graph, self.output_mask].reshape(self.n_buses, 2)
 

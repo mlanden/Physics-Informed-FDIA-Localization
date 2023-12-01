@@ -49,11 +49,6 @@ class ReactivePowerGrapghEquation(Equation):
                 v_j = graph.x[targets, 1]
             radians = (torch.pi / 180) * (theta_k - theta_j)
             bus_loss += v_j * (gs * torch.sin(radians) - bs * torch.cos(radians))
-            
-        gs = graph.x[node_idxs, -2]
-        bs = graph.x[node_idxs, -1]
-        radians = (torch.pi / 180) * (theta_k - theta_k)
-        bus_loss += v_k * (gs * torch.sin(radians) - bs * torch.cos(radians))
         bus_loss *= v_k
         bus_loss -= power_k
         return bus_loss ** 2
@@ -94,11 +89,6 @@ class ReactivePowerGrapghEquation(Equation):
                 v_j = input_graph.x[targets, 1]
             radians = (torch.pi / 180) * (theta_k - theta_j)
             bus_loss += v_j * (gs * torch.sin(radians) - bs * torch.cos(radians))
-
-        gs = input_graph.x[node_idxs, -2]
-        bs = input_graph.x[node_idxs, -1]
-        radians = (torch.pi / 180) * (theta_k - theta_k)
-        bus_loss += v_k * (gs * torch.sin(radians) - bs * torch.cos(radians))
         bus_loss *= v_k
         bus_loss -= power_k
         return bus_loss ** 2

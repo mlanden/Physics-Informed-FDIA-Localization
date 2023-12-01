@@ -29,7 +29,7 @@ class PINNTrainer:
         self.size = self.conf["train"]["gpus"]
 
         if self.use_graph:
-            self.model = GCN(conf, 4, 2)
+            self.model = GCN(conf, 2, 2)
         else:
             self.model = FCN(conf, 2 * self.n_buses + 2 * self.n_buses ** 2, 2 * self.n_buses)
         self.equations = build_equations(conf, dataset.get_categorical_features(), 
@@ -232,7 +232,8 @@ class PINNTrainer:
                 targets = targets.to(device)
             data_loss, physics_loss = self._compute_loss(inputs, targets)
             data_loss = data_loss.mean(dim=1).view(-1, 1)
-            loss = torch.cat([data_loss, physics_loss], dim=1)
+            # loss = torch.cat([data_loss, physics_loss], dim=1)
+            loss = physics_loss
             losses.append(loss)
         loss = torch.cat(losses)
 
@@ -349,8 +350,8 @@ class PINNTrainer:
 
     def _compute_loss(self, inputs, targets):
         predicted = self.model(inputs)
-        data_loss = F.mse_loss(predicted, targets, reduction='none')
-        # data_loss = torch.zeros_like(targets)
+        # data_loss = F.mse_loss(predicted, targets, reduction='none')
+        data_loss = torch.zeros_like(targets)
 
         physics_loss = torch.zeros((len(inputs), len(self.equations)), 
                                    device=predicted.device)

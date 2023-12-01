@@ -1,5 +1,5 @@
 task: train
-# task: error
+task: error
 # task: test
 # task: "hyperparameter_optimize"
 # task: equations
@@ -8,14 +8,14 @@ data:
   type: grid
   normal: ../data/grid/14_normal.csv
   normal: ../data/grid/14_continuous_admittance.csv
-  # normal: ../data/grid/14_line_1_out.csv
-  # normal: ../data/grid/14_powerworld.csv
+  normal: ../data/grid/14_line_1_out.csv
+  normal: ../data/grid/14_lines_out.csv
   # normal: ../data/grid/118_state.csv
   # normal: ../data/grid/14_simple.csv
   attack: ../data/grid/14_attack.csv
   attack: ../data/grid/14_normal.csv
   attack: ../data/grid/14_continuous_admittance.csv
-  # attack: ../data/grid/14_line_1_out.csv
+  attack: ../data/grid/14_line_1_out.csv
   types: ../data/grid/14_types.csv
   ybus: ../data/grid/14_ybus.csv
   n_buses: 14
@@ -33,7 +33,7 @@ model:
   dropout: 0
   threshold: 2.5
   graph: 1
-  n_heads: 3
+  n_heads: 8
 train:
   cuda: 0
   gpus: 4
@@ -48,8 +48,11 @@ train:
   checkpoint_dir: checkpoint
   load_checkpoint: 0
 
-  train_fraction: 0.5
-  validate_fraction: 0.25
-  find_error_fraction: 0.25
+  # train_fraction: 0.5
+  # validate_fraction: 0.25
+  # find_error_fraction: 0.25
+  train_fraction: 0
+  validate_fraction: 0
+  find_error_fraction: 1
   equation_name: grid
   physics: 1
