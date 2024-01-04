@@ -3,6 +3,7 @@ from sched import scheduler
 import sys
 from os import path
 from pprint import pprint
+from ray import is_initialized
 from sympy import use
 import torch
 import yaml
@@ -11,9 +12,14 @@ from torch.utils.data import Subset
 from torch_geometric.loader import DataLoader
 import torch.multiprocessing as mp
 import numpy as np
-from ray import tune, air
+
+import ray
+from ray import tune
+from ray.train import ScalingConfig, RunConfig
+from ray.train.torch import TorchTrainer
 from ray.tune import CLIReporter
-from ray.tune.schedulers import ASHAScheduler
+from ray.tune.tune_config import TuneConfig
+from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 
 from datasets import GridDataset, GridGraphDataset
 from training import PINNTrainer
@@ -22,8 +28,11 @@ from equations import build_equations
 
 def train(config=None):
     if config is not None:
-        conf["model"]["n_layers"] = config["n_layers"]
-        conf["model"]["hidden_size"] = config["size"]
+        conf["model"]["n_heads"] = config.get("n_heads", conf["model"]["n_heads"])
+        conf["model"]["hidden_size"] = config.get("size", conf["model"]["hidden_size"])
+        conf["train"]["lr"] = config["lr"]
+        conf["train"]["regularization"] = config["regularization"]
+
     if use_graph:
         dataset = GridGraphDataset(conf, conf["data"]["normal"], True)
     else:
@@ -38,10 +47,12 @@ def train(config=None):
     validation_data = Subset(dataset, val_idx)
     
     trainer = PINNTrainer(conf, dataset)
-
-    mp.spawn(trainer.train, args=(train_data, validation_data),
-             nprocs=gpus,
-             join=True)
+    if ray.is_initialized():
+        trainer.train(0, train_data, validation_data)
+    else:
+        mp.spawn(trainer.train, args=(train_data, validation_data),
+                nprocs=gpus,
+                join=True)
     
 def get_normal_profile():
     if use_graph:
@@ -69,37 +80,58 @@ def detect():
 def hyperparameter_optimize():
     conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
     conf["data"]["ybus"] = path.abspath(conf["data"]["ybus"])
+    conf["data"]["types"] = path.abspath(conf["data"]["types"])
     conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
-
+    population_training = conf["train"].get("population_train", 1)
     config = {
-        "n_layers": tune.choice([i for i in range(2, 9)]),
-        "size": tune.choice([2 ** i for i in range(9)])
+        "lr": tune.loguniform(1e-4, 1e-1),
+        "dropout": tune.uniform(0.1, 0.8),
+        "regularization": tune.loguniform(1e-5, 1e-1)
     }
 
-    scheduler = ASHAScheduler(
-        metric="loss",
-        mode="min",
-        max_t=conf["train"]["epochs"],
-        grace_period=1,
-        reduction_factor=2
-    )
-
-    reporter = CLIReporter(parameter_columns=list(config.keys()),
-                           metric_columns=["loss", "training_iterations"])
+    if not population_training:
+        config.update({
+            "n_heads": tune.choice([i for i in range(2, 9)]),
+            "size": tune.choice([2 ** i for i in range(9)]),
+        })
+    if not population_training:
+        scheduler = ASHAScheduler(
+            max_t=conf["train"]["epochs"],
+            grace_period=1,
+            metric="loss",
+            mode="min",
+            reduction_factor=2
+        )
+    else:
+        scheduler = PopulationBasedTraining(
+            time_attr="training_iteration",
+            perturbation_interval=5,
+            metric="loss",
+            mode="min",
+            hyperparam_mutations={
+                "train_loop_config": config
+            }
+        )
     
-    results = tune.run(
+    trainer = TorchTrainer(
         train,
-        resources_per_trial={"gpu": 1},
-        config=config,
-        num_samples=conf["train"]["num_samples"],
-        progress_reporter=reporter,
-        run_config=air.RunConfig(name="tune_ics",
-                                 progress_reporter=reporter),
-        scheduler=scheduler
+        scaling_config=ScalingConfig(num_workers=1, use_gpu=conf["train"]["cuda"]))
+    
+    tuner = tune.Tuner(
+        trainer,
+        param_space={
+            "train_loop_config": config
+        },
+        tune_config=TuneConfig(
+            num_samples=conf["train"]["num_samples"],
+            scheduler=scheduler
+        ),
+        run_config=RunConfig(storage_path=path.abspath("./checkpoint"))
     )
-    best_trial = results.get_best_trial("loss", "min")
+    results = tuner.fit()
+    best_trial = results.get_best_result("loss", "min")
     print(f"Best trial config: {best_trial.config}")
-    print(f"Best trial validation loss: {best_trial.last_result['loss']}")
+    print(f"Best trial checkpoint: {best_trial.path}")
 
 if __name__ == '__main__':
     if len(sys.argv) != 2:

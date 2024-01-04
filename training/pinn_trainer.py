@@ -1,6 +1,8 @@
 import  os
+import tempfile
 from os import path
 import ray
+from ray import train, tune
 from sklearn.metrics import confusion_matrix
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
@@ -8,8 +10,8 @@ from torch_geometric.loader import DataLoader as gDataLoader
 import torch.distributed as dist
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
-from ray.air import Checkpoint, session
 from tqdm import tqdm
+import matplotlib.pyplot as plt
 
 from models import FCN, GCN
 from equations import build_equations
@@ -36,17 +38,21 @@ class PINNTrainer:
                                          dataset.get_continuous_features())
         
     def _init_ddp(self, rank, datasets, shuffles):
-        os.environ['MASTER_ADDR'] = '127.0.0.1'
-        os.environ['MASTER_PORT'] = '29500'
-        if self.conf["train"]["cuda"]:
-            backend = "nccl"
+        if not ray.is_initialized():
+            os.environ['MASTER_ADDR'] = '127.0.0.1'
+            os.environ['MASTER_PORT'] = '29500'
+            if self.conf["train"]["cuda"]:
+                backend = "nccl"
+            else:
+                backend = "gloo"
+            dist.init_process_group(backend, rank=rank, world_size=self.size)
+            if backend == "gloo":
+                self.model = torch.nn.parallel.DistributedDataParallel(self.model)
+            else:
+                self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[rank], output_device=rank)
         else:
-            backend = "gloo"
-        dist.init_process_group(backend, rank=rank, world_size=self.size)
-        if backend == "gloo":
-            self.model = torch.nn.parallel.DistributedDataParallel(self.model)
-        else:
-            self.model = torch.nn.parallel.DistributedDataParallel(self.model, device_ids=[rank], output_device=rank)
+            if not train.get_checkpoint():
+                self.model = train.torch.prepare_model(self.model)
 
         loaders = []
         for dataset, shuffle in zip(datasets, shuffles):
@@ -70,16 +76,18 @@ class PINNTrainer:
     def train(self, rank, train_dataset, val_dataset):
         start_epoch = 0
         best_loss = torch.inf
-        optim = torch.optim.Adam(self.model.parameters(), lr = self.conf["train"]["lr"], weight_decay=self.conf["train"]["regularization"])
+        optim = torch.optim.Adam(self.model.parameters(), lr = self.conf["train"]["lr"],
+                                  weight_decay=self.conf["train"]["regularization"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, factor=0.5)
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         self.model = self.model.to(device)
 
         checkpoint = None
         if ray.ray.is_initialized():
-            checkpoint = session.get_checkpoint()
+            checkpoint = train.get_checkpoint()
             if checkpoint:
-                checkpoint = checkpoint.to_dict()
+                with checkpoint.as_directory() as checkpoint_dir:
+                    checkpoint = torch.load(path.join(checkpoint_dir, "model.pt"))
         elif self.conf["train"]["load_checkpoint"] and path.exists(self.checkpoint_path):
             checkpoint = torch.load(self.checkpoint_path)
         
@@ -90,12 +98,13 @@ class PINNTrainer:
             scheduler.load_state_dict(checkpoint["schedule"])
             best_loss = checkpoint["loss"]
 
+        train_loader, val_loader = self._init_ddp(rank, [train_dataset, val_dataset], [True, False])
+        rank = dist.get_rank()
         if rank == 0:
             print(self.model)
-        train_loader, val_loader = self._init_ddp(rank, [train_dataset, val_dataset], [True, False])
         epochs = self.conf["train"]["epochs"]
 
-        if rank == 0:
+        if rank == 0 and not ray.is_initialized():
             if not path.exists(self.checkpoint_dir):
                 os.makedirs(self.checkpoint_dir)
             version = len([name for name in os.listdir(self.checkpoint_dir) if path.isdir(path.join(self.checkpoint_dir, name))]) + 1
@@ -104,7 +113,7 @@ class PINNTrainer:
         
         for epoch in range(start_epoch, epochs):
             train_loader.sampler.set_epoch(epoch)
-            if rank == 0:
+            if rank == 0 and not ray.is_initialized():
                 loader = tqdm(train_loader, position=0, leave=True)
             else:
                 loader = train_loader
@@ -123,7 +132,7 @@ class PINNTrainer:
                 loss.backward()
                 optim.step()
                 total_loss += loss.detach()
-                if rank == 0:
+                if rank == 0 and not ray.is_initialized():
                     loader.set_description(f"Train Epoch [{epoch: 3d}/{epochs}]")
                     if self.use_physics:
                         loader.set_postfix(loss=loss.item(), data_loss=data_loss.item(), physics_loss=physics_loss.item())
@@ -133,11 +142,11 @@ class PINNTrainer:
             total_loss /= len(train_loader)
             dist.all_reduce(total_loss)
             total_loss /= self.size
-            if rank == 0:
+            if rank == 0 and not ray.is_initialized():
                 tb_writer.add_scalar("Training loss", total_loss, epoch)
 
             val_loader.sampler.set_epoch(epoch)
-            if rank == 0:
+            if rank == 0 and not ray.is_initialized():
                 loader = tqdm(val_loader)
             else:
                 loader = val_loader
@@ -160,7 +169,7 @@ class PINNTrainer:
                     total_physics_loss += physics_loss
                     total_loss += loss
 
-                    if rank == 0:
+                    if rank == 0 and not ray.is_initialized():
                         loader.set_description(f"Val Epoch [{epoch: 3d}/{epochs}]")
                         if self.use_physics:
                            loader.set_postfix(loss=loss.item(), data_loss=data_loss.item(), physics_loss=physics_loss.item())
@@ -182,23 +191,31 @@ class PINNTrainer:
 
                 if rank == 0:
                     lr = optim.param_groups[0]['lr']
-                    tb_writer.add_scalar("Learning Rate", lr, epoch)
-                    tb_writer.add_scalar("Validation Loss", total_loss, epoch)
-                    if self.use_physics:
-                        tb_writer.add_scalar("Data loss", total_data_loss, epoch)
-                        tb_writer.add_scalar("Physics loss", total_physics_loss, epoch)
+                    if not ray.is_initialized():
+                        tb_writer.add_scalar("Learning Rate", lr, epoch)
+                        tb_writer.add_scalar("Validation Loss", total_loss, epoch)
+                        if self.use_physics:
+                            tb_writer.add_scalar("Data loss", total_data_loss, epoch)
+                            tb_writer.add_scalar("Physics loss", total_physics_loss, epoch)
 
                     if loss < best_loss:
+                        try:
+                            model = self.model.module
+                        except AttributeError:
+                            model = self.model
                         checkpoint = {
-                            "model": self.model.module.state_dict(),
+                            "model": model.state_dict(),
                             "optim": optim.state_dict(),
                             "schedule": scheduler.state_dict(),
                             "loss": total_loss.item(),
                             "epoch": epoch
                         }
-                        if ray.ray.is_initialized():
-                            checkpoint = Checkpoint.from_dict(checkpoint)
-                            session.report({"loss": total_loss}, checkpoint=checkpoint)
+                        if ray.is_initialized():
+                            with tempfile.TemporaryDirectory() as tempdir:
+                                torch.save(checkpoint, path.join(tempdir, "model.pt"))
+                                train.report({"loss": total_loss.item()}, checkpoint=
+                                            train.Checkpoint.from_directory(tempdir))
+                                print(f"Epoch {epoch}: Loss: {total_loss.item()}")
                         else:
                             torch.save(checkpoint, self.checkpoint_path)
             dist.barrier()
@@ -213,6 +230,7 @@ class PINNTrainer:
         self.model.load_state_dict(checkpoint["model"])
         if rank == 0:
             print(self.model)
+        self.model = self.model.to(device)
         loader = self._init_ddp(rank, [dataset], [False])[0]
 
         losses = []
@@ -241,6 +259,7 @@ class PINNTrainer:
             all_losses = [torch.empty(loss.size()) for _ in range(self.size)]
             dist.gather(loss, all_losses, 0)
             losses = torch.cat(all_losses)
+            self.plot(losses)
             
             mean = torch.mean(losses, dim=0)
             std = torch.std(losses, dim=0)
@@ -361,3 +380,13 @@ class PINNTrainer:
         if self.use_graph:
             data_loss = data_loss.view(physics_loss.size(0), -1)
         return data_loss, physics_loss
+    
+    def plot(self, losses):
+        losses = torch.flatten(losses)
+        ax = plt.subplot()
+        ax.hist(losses, bins=20, log=True)
+        ax.set(title="Physics Losses",
+               xlabel="Loss",
+               ylabel="Count")
+        plt.tight_layout()
+        plt.savefig(path.join(self.checkpoint_dir, "loss_plot.png"))

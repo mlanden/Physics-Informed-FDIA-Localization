@@ -8,9 +8,10 @@ class GCN(nn.Module):
         super().__init__()
         self.hidden_size = conf["model"]["hidden_size"]
         self.n_heads = conf["model"]["n_heads"]
-        self.conv1 = gnn.GATConv(n_inputs, self.hidden_size, self.n_heads)
-        self.conv2 = gnn.GATConv(self.hidden_size * self.n_heads, self.hidden_size,
-                                  self.n_heads, concat=False)
+        dropout = conf["model"]["dropout"]
+        self.conv1 = gnn.GATConv(n_inputs, self.hidden_size, self.n_heads, dropout=dropout)
+        self.conv2 = gnn.GATConv(self.hidden_size * self.n_heads, n_outputs,
+                                  self.n_heads, concat=False, dropout=dropout)
 
     def forward(self, data):
         x = data.x
