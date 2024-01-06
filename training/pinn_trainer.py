@@ -2,8 +2,9 @@ import  os
 import tempfile
 from os import path
 import ray
-from ray import train, tune
-from sklearn.metrics import confusion_matrix
+from ray import train
+from sklearn.metrics import confusion_matrix, roc_curve
+import numpy as np
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
 from torch_geometric.loader import DataLoader as gDataLoader
@@ -280,10 +281,11 @@ class PINNTrainer:
         
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         checkpoint = torch.load(self.checkpoint_path)
-        mean = checkpoint["mean"]
-        std = checkpoint["std"]
+        mean = checkpoint["mean"].to(device)
+        std = checkpoint["std"].to(device)
         threshold = self.conf["model"]["threshold"]
         self.model.load_state_dict(checkpoint["model"])
+        self.model = self.model.to(device)
         loader = self._init_ddp(rank, [datset], [False])[0]
         if rank == 0:
             data_loader = tqdm(loader)
@@ -292,7 +294,8 @@ class PINNTrainer:
 
         alarms = []
         attacks = []
-        attack_idxs = []
+        # attack_idxs = []
+        scores = []
         max_idx = []
         for data in data_loader:
             if not self.use_graph:
@@ -303,41 +306,48 @@ class PINNTrainer:
                 data = data.to(device)
                 inputs = data
                 targets = data.y
+                attack = data.label
             data_loss, physics_loss = self._compute_loss(inputs, targets)
             data_loss = data_loss.mean(dim=1).view(-1, 1)
-            loss = torch.cat([data_loss, physics_loss], dim=1)
-            scores = (loss - mean) / std
-            max_idx.append(torch.max(scores, dim=1).indices)
-            alarm = torch.max(scores, dim=1).values > threshold
-            attack = attack_idx != -1
+            # loss = torch.cat([data_loss, physics_loss], dim=1)
+            loss = physics_loss
+            score = (loss - mean) / std
+            maxes = torch.max(score, dim=1)
+            scores.append(maxes.values)
+            max_idx.append(maxes.indices)
+            alarm = torch.max(score, dim=1).values > threshold
             
             alarms.append(alarm)
             attacks.append(attack)
-            attack_idxs.append(attack_idx)
         # print(max_idx)
         alarms = torch.cat(alarms)
         attacks = torch.cat(attacks)
-        attack_idxs = torch.cat(attack_idxs)
+        scores = torch.cat(scores).detach()
+        # attack_idxs = torch.cat(attack_idxs)
 
         if rank == 0:
             all_alarms = [torch.empty_like(alarms) for _ in range(self.size)]
             all_attacks = [torch.empty_like(attacks) for _ in range(self.size)]
-            all_attack_idxs = [torch.empty_like(attack_idxs) for _ in range(self.size)]
+            # all_attack_idxs = [torch.empty_like(attack_idxs) for _ in range(self.size)]
+            all_scores = [torch.empty_like(scores) for _ in range(self.size)]
             dist.gather(alarms, all_alarms, 0)
             dist.gather(attacks, all_attacks, 0)
-            dist.gather(attack_idxs, all_attack_idxs, 0)
-            alarms = torch.cat(all_alarms)
-            attacks = torch.cat(all_attacks)
-            attack_idxs = torch.cat(all_attack_idxs)
+            # dist.gather(attack_idxs, all_attack_idxs, 0)
+            dist.gather(scores, all_scores, 0)
+            alarms = torch.cat(all_alarms).cpu()
+            attacks = torch.cat(all_attacks).cpu()
+            # attack_idxs = torch.cat(all_attack_idxs)
+            scores = torch.cat(all_scores).cpu()
 
-            self._compute_stats(alarms, attacks, attack_idxs)
+            self._compute_stats(alarms, attacks, scores)#, attack_idxs)
         else:
             dist.gather(alarms, [], 0)
             dist.gather(attacks, [], 0)
-            dist.gather(attack_idxs, [], 0)
+            # dist.gather(attack_idxs, [], 0)
+            dist.gather(scores, [], 0)
         dist.barrier()
 
-    def _compute_stats(self, alarms, attacks, attack_idxs):
+    def _compute_stats(self, alarms, attacks, scores, attack_idxs=0):
         cm = confusion_matrix(attacks, alarms)
         tp = cm[1][1]
         fp = cm[0][1]
@@ -359,6 +369,20 @@ class PINNTrainer:
         print(f"F1 Score: {f1 * 100 :3.2f}")
         print(f"Precision: {precision * 100 :3.2f}")
         print(f"Accuracy: {accuracy * 100 :3.2f}")
+
+        fpr, tpr, thresholds = roc_curve(attacks, scores)
+        plt.plot(fpr, tpr)
+        plt.xlabel("False Positive Rate")
+        plt.ylabel("True Positive Rate")
+        plt.xticks(np.arange(0, 1.1, .1))
+        plt.yticks(np.arange(0, 1.1, .1))
+        plt.grid(True)
+        plt.savefig(path.join(self.checkpoint_dir, "roc.png"))
+
+        with open(path.join(self.checkpoint_dir, "thresholds.txt"), "w") as fd:
+            for i in range(len(tpr)):
+                if fpr[i] < .1 and tpr[i] > .7:
+                    print(f"{i}, {tpr[i]:0.2f}, {fpr[i]:0.2f}, {thresholds[i]:.2f}", file=fd)
 
     def _combine_losses(self, inputs, targets):
         data_loss, physics_loss = self._compute_loss(inputs, targets)

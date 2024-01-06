@@ -71,7 +71,10 @@ def get_normal_profile():
              join=True)
     
 def detect():
-    dataset = GridDataset(conf, conf["data"]["attack"], False)
+    if use_graph:
+        dataset = GridGraphDataset(conf, conf["data"]["attack"], False)
+    else:
+        dataset = GridDataset(conf, conf["data"]["attack"], False)
     trainer = PINNTrainer(conf, dataset)
     mp.spawn(trainer.detect, args=[dataset],
              nprocs=gpus,

@@ -22,7 +22,7 @@ class GridGraphDataset(InMemoryDataset):
 
         data = pd.read_csv(data_path).sample(frac=1)
         self.features = data.iloc[:, 2: -1].to_numpy()
-        self.labels = data.iloc[:, -1] == "Yes"
+        self.labels = data.iloc[:, -1] == "yes"
         self.labels = self.labels.to_numpy()
         
         super(InMemoryDataset, self).__init__(root)
@@ -136,7 +136,7 @@ class GridGraphDataset(InMemoryDataset):
         grids = []
         for graph in range(len(self.features)):
             nodes = self.features[graph, self.input_mask][:2 * self.n_buses].reshape(self.n_buses, 2)
-            
+            label = self.labels[graph]
             sources = []
             targets = []
             edge_features = []
@@ -158,7 +158,8 @@ class GridGraphDataset(InMemoryDataset):
             data = Data(x=torch.tensor(nodes, dtype=torch.float),
                         edge_index=edge_index,
                         edge_attr=torch.tensor(np.array(edge_features), dtype=torch.float),
-                        y=torch.tensor(targets)
+                        y=torch.tensor(targets),
+                        label=torch.tensor(label).view(1, 1)
                         )
             grids.append(data)
             
