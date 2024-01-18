@@ -15,7 +15,7 @@ import numpy as np
 
 import ray
 from ray import tune
-from ray.train import ScalingConfig, RunConfig
+from ray.train import ScalingConfig, RunConfig, CheckpointConfig
 from ray.train.torch import TorchTrainer
 from ray.tune import CLIReporter
 from ray.tune.tune_config import TuneConfig
@@ -24,7 +24,7 @@ from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 from datasets import GridDataset, GridGraphDataset
 from training import PINNTrainer
 from equations import build_equations
-
+from utils import generate_fdia
 
 def train(config=None):
     if config is not None:
@@ -120,7 +120,13 @@ def hyperparameter_optimize():
         train,
         scaling_config=ScalingConfig(num_workers=1, use_gpu=conf["train"]["cuda"]))
     
-    tuner = tune.Tuner(
+    if conf["train"]["load_checkpoint"]:
+        tuner = tune.Tuner.restore(
+            conf["train"]["checkpoint_dir"],
+            trainer
+        )
+    else:
+        tuner = tune.Tuner(
         trainer,
         param_space={
             "train_loop_config": config
@@ -129,8 +135,13 @@ def hyperparameter_optimize():
             num_samples=conf["train"]["num_samples"],
             scheduler=scheduler
         ),
-        run_config=RunConfig(storage_path=path.abspath("./checkpoint"))
+        run_config=RunConfig(storage_path=path.abspath("./checkpoint"),
+                             checkpoint_config=CheckpointConfig(num_to_keep=4, 
+                                                                checkpoint_score_attribute="loss",
+                                                                checkpoint_score_order="min")),
+
     )
+    
     results = tuner.fit()
     best_trial = results.get_best_result("loss", "min")
     print(f"Best trial config: {best_trial.config}")
@@ -197,5 +208,7 @@ if __name__ == '__main__':
             print("Average loss:", np.mean(losses))
             for i in range(len(equations)):
                 equations[i].loss_plot()
+    elif task == "attack_generation":
+        generate_fdia(conf)
     else:
         raise RuntimeError("Unknown task")

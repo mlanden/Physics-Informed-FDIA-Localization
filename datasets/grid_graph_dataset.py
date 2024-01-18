@@ -21,8 +21,9 @@ class GridGraphDataset(InMemoryDataset):
         self.powerworld = conf["data"]["powerworld"]
 
         data = pd.read_csv(data_path).sample(frac=1)
-        self.features = data.iloc[:, 2: -1].to_numpy()
-        self.labels = data.iloc[:, -1] == "yes"
+        self.features = data.iloc[:, 2: -2].to_numpy()
+        self.locations = data.iloc[:, -1].to_numpy()
+        self.labels = data.iloc[:, -2] == "yes"
         self.labels = self.labels.to_numpy()
         
         super(InMemoryDataset, self).__init__(root)

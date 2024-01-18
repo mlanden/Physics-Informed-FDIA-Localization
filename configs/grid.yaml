@@ -4,6 +4,7 @@ task: test
 # task: "hyperparameter_optimize"
 # task: equations
 # task: equ_error
+task: attack_generation
 data: 
   type: grid
   normal: ../data/grid/14_normal.csv
@@ -13,18 +14,23 @@ data:
   # normal: ../data/grid/14_2_lines_out.csv
   # normal: ../data/grid/118_state.csv
   # normal: ../data/grid/14_simple.csv
-  attack: ../data/grid/14_attacks.csv
+  attack: ../data/grid/14_attacks_test.csv
+  # attack: ../data/grid/14_attacks_2.csv
   # attack: ../data/grid/14_normal.csv
   # attack: ../data/grid/14_continuous_admittance.csv
   # attack: ../data/grid/14_line_1_out.csv
+  attack_base: ../data/grid/14_attack_bas.csv
   types: ../data/grid/14_types.csv
   ybus: ../data/grid/14_ybus.csv
   n_buses: 14
   mva_base: 100
   powerworld: 0
-  
+
+attack:
+  network_parameter_error: 0.1
+  state_variable_error: 0.07
 model:
-  hidden_size: 2
+  hidden_size: 20
   layer_sizes: [40, 20, 10]
   n_layers: 6
   sequence_length: 10
@@ -32,9 +38,9 @@ model:
   profile_type: mean
 #  profile_type: gmm
   dropout: 0
-  threshold: 197
+  threshold: 195.5
   graph: 1
-  n_heads: 8
+  n_heads: 3
 train:
   cuda: 1
   gpus: 4
@@ -47,7 +53,7 @@ train:
   scale: [0.1, 1]
   regularization: 0.001
   num_samples: 20
-  checkpoint: grid_14_cube_sampling
+  checkpoint: grid_14_line_sampling
   checkpoint_dir: checkpoint
   load_checkpoint: 0
 

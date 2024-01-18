@@ -222,6 +222,7 @@ class PINNTrainer:
             dist.barrier()
 
     def create_normal_profile(self, rank, dataset):
+    
         if not path.exists(self.checkpoint_path):
             if rank == 0:
                 print("Checpoint does not exist")
@@ -229,6 +230,7 @@ class PINNTrainer:
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         checkpoint = torch.load(self.checkpoint_path)
         self.model.load_state_dict(checkpoint["model"])
+        self.model.eval()
         if rank == 0:
             print(self.model)
         self.model = self.model.to(device)
@@ -240,26 +242,27 @@ class PINNTrainer:
         else:
             data_loader = loader
 
-        for data in data_loader:
-            if self.use_graph:
-                data = data.to(device)
-                inputs = data
-                targets = data.y
-            else:
-                inputs, targets = data
-                inputs = inputs.to(device)
-                targets = targets.to(device)
-            data_loss, physics_loss = self._compute_loss(inputs, targets)
-            data_loss = data_loss.mean(dim=1).view(-1, 1)
-            # loss = torch.cat([data_loss, physics_loss], dim=1)
-            loss = physics_loss
-            losses.append(loss)
-        loss = torch.cat(losses)
+        with torch.no_grad():
+            for data in data_loader:
+                if self.use_graph:
+                    data = data.to(device)
+                    inputs = data
+                    targets = data.y
+                else:
+                    inputs, targets = data
+                    inputs = inputs.to(device)
+                    targets = targets.to(device)
+                data_loss, physics_loss = self._compute_loss(inputs, targets)
+                data_loss = data_loss.mean(dim=1).view(-1, 1)
+                # loss = torch.cat([data_loss, physics_loss], dim=1)
+                loss = physics_loss
+                losses.append(loss)
+            loss = torch.cat(losses)
 
         if rank == 0:
-            all_losses = [torch.empty(loss.size()) for _ in range(self.size)]
+            all_losses = [torch.empty(loss.size(), device=device) for _ in range(self.size)]
             dist.gather(loss, all_losses, 0)
-            losses = torch.cat(all_losses)
+            losses = torch.cat(all_losses).cpu()
             self.plot(losses)
             
             mean = torch.mean(losses, dim=0)
@@ -286,6 +289,7 @@ class PINNTrainer:
         threshold = self.conf["model"]["threshold"]
         self.model.load_state_dict(checkpoint["model"])
         self.model = self.model.to(device)
+        self.model.eval()
         loader = self._init_ddp(rank, [datset], [False])[0]
         if rank == 0:
             data_loader = tqdm(loader)
@@ -297,28 +301,29 @@ class PINNTrainer:
         # attack_idxs = []
         scores = []
         max_idx = []
-        for data in data_loader:
-            if not self.use_graph:
-                inputs, targets = data
-                inputs = inputs.to(device)
-                targets = targets.to(device)
-            else:
-                data = data.to(device)
-                inputs = data
-                targets = data.y
-                attack = data.label
-            data_loss, physics_loss = self._compute_loss(inputs, targets)
-            data_loss = data_loss.mean(dim=1).view(-1, 1)
-            # loss = torch.cat([data_loss, physics_loss], dim=1)
-            loss = physics_loss
-            score = (loss - mean) / std
-            maxes = torch.max(score, dim=1)
-            scores.append(maxes.values)
-            max_idx.append(maxes.indices)
-            alarm = torch.max(score, dim=1).values > threshold
-            
-            alarms.append(alarm)
-            attacks.append(attack)
+        with torch.no_grad():
+            for data in data_loader:
+                if not self.use_graph:
+                    inputs, targets = data
+                    inputs = inputs.to(device)
+                    targets = targets.to(device)
+                else:
+                    data = data.to(device)
+                    inputs = data
+                    targets = data.y
+                    attack = data.label
+                data_loss, physics_loss = self._compute_loss(inputs, targets)
+                data_loss = data_loss.mean(dim=1).view(-1, 1)
+                # loss = torch.cat([data_loss, physics_loss], dim=1)
+                loss = physics_loss
+                score = (loss - mean) / std
+                maxes = torch.max(score, dim=1)
+                scores.append(maxes.values)
+                max_idx.append(maxes.indices)
+                alarm = torch.max(score, dim=1).values > threshold
+                
+                alarms.append(alarm)
+                attacks.append(attack)
         # print(max_idx)
         alarms = torch.cat(alarms)
         attacks = torch.cat(attacks)
