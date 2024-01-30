@@ -1,4 +1,5 @@
 import os
+import json
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union
@@ -9,7 +10,7 @@ from .grid_dataset import GridDataset
 from utils import to_complex
 
 class GridGraphDataset(InMemoryDataset):
-    def __init__(self, conf, data_path, train):
+    def __init__(self, conf, data_path):
         root = data_path[:data_path.index(".csv")]
         if not os.path.exists(root):
             os.makedirs(root)
@@ -137,7 +138,12 @@ class GridGraphDataset(InMemoryDataset):
         grids = []
         for graph in range(len(self.features)):
             nodes = self.features[graph, self.input_mask][:2 * self.n_buses].reshape(self.n_buses, 2)
-            label = self.labels[graph]
+            location = self.locations[graph]
+            classes = torch.zeros(2 * self.n_buses)
+            if location != "-1":
+                location = json.loads(location)
+                classes.scatter_(0, torch.tensor(location), 1)
+
             sources = []
             targets = []
             edge_features = []
@@ -160,7 +166,7 @@ class GridGraphDataset(InMemoryDataset):
                         edge_index=edge_index,
                         edge_attr=torch.tensor(np.array(edge_features), dtype=torch.float),
                         y=torch.tensor(targets),
-                        label=torch.tensor(label).view(1, 1)
+                        classes=classes.view(1, -1)
                         )
             grids.append(data)
             

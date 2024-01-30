@@ -10,21 +10,31 @@ def generate_fdia(conf):
     n_buses = conf["data"]["n_buses"]
     network_parameter_error = conf["attack"]["network_parameter_error"]
     state_variable_error = conf["attack"]["state_variable_error"]
+    attack_bias = conf["attack"]["bias"]
     base_states_pd = pd.read_csv(attack_base)
     base_states = base_states_pd.to_numpy()
+    mva_base = conf["data"]["mva_base"]
 
-    new_states = np.array()
-    for i in range(10):#len(base_states)):
+
+    new_states = []
+    for i in range(len(base_states)):
         # Add the non attack state
-        new_states = np.vstack((new_states, base_states[i]))
+        new_states.append(base_states[i])
 
-        true_state = base_states[i]
-        attack_state = np.copy(base_states[i])
+        true_state = np.copy(base_states[i][2:])
+        # Go to per unit
+        for bus in range(n_buses):
+            bus_base_idx = 6 * bus
+            for i in range(4):
+                true_state[bus_base_idx + i] /= mva_base
+        
+        attack_state = np.copy(true_state)
 
         # apply network parameter errors
         ybus_base = 6 * n_buses
         for pos in range(ybus_base, ybus_base + n_buses * n_buses):
             true_value = to_complex(true_state[pos])
+            true_state[pos] = true_value
             lower = true_value.real - network_parameter_error * true_value.real
             upper = true_value.real + network_parameter_error * true_value.real
             bias_real_value = lower + (upper - lower) * np.random.random()
@@ -52,16 +62,26 @@ def generate_fdia(conf):
             attack_state[6 * bus + 5] = bias_value
 
         # Compute c to add to state and add it
-        false_attack_state = attack_state
+        false_attack_state = np.copy(attack_state)
         # TODO: add false data
         attacked_bus = np.random.randint(n_buses)
+        bus_base_idx = 6 * attacked_bus
+        true_angle = attack_state[bus_base_idx + 4]
+        attacked_angle = true_angle * ((1 - attack_bias) + 2 * attack_bias 
+                                       * np.random.random())
+        false_attack_state[bus_base_idx + 4] = attacked_angle
+
+        true_magnitude = attack_state[bus_base_idx + 5]
+        attacked_magnitude = true_magnitude * ((1 - attack_bias) + 2 * attack_bias
+                                               * np.random.random())
+        false_attack_state[bus_base_idx + 5] = attacked_magnitude
 
         # compute h(x\hat) and h(x\hhat + c)
         for bus_k in range(n_buses):
             # real power
             # h(x\hat)
             total_power = 0
-            admittance_base = 6 * n_buses + n_buses * bus_k
+            ybus_base = 6 * n_buses + n_buses * bus_k
             k_base_idx = 6 * bus_k
             theta_k = attack_state[k_base_idx + 4]
             v_k = attack_state[k_base_idx + 5]
@@ -70,12 +90,13 @@ def generate_fdia(conf):
                 theta_j = attack_state[j_base_idx + 4]
                 v_j = attack_state[j_base_idx + 5]
                 radians = (np.pi / 180) * (theta_k - theta_j)
-                admittance = attack_state[admittance_base + bus_j]
+                admittance = attack_state[ybus_base + bus_j]
                 bus_power = v_j * (admittance.real * np.cos(radians)
                                    + admittance.imag * np.sin(radians))
                 total_power += bus_power
             total_power *= v_k
             gen_mw = attack_state[k_base_idx + 1]
+            # Load = gen - bus_power
             attack_state[k_base_idx + 3] = gen_mw - total_power
 
             #h(x\hat + c)
@@ -87,12 +108,12 @@ def generate_fdia(conf):
                 theta_j = false_attack_state[j_base_idx + 4]
                 v_j = false_attack_state[j_base_idx + 5]
                 radians = (np.pi / 180) * (theta_k - theta_j)
-                admittance = false_attack_state[admittance_base + bus_j]
+                admittance = false_attack_state[ybus_base + bus_j]
                 bus_power = v_j * (admittance.real * np.cos(radians) 
                                    + admittance.imag * np.sin(radians))
                 total_power += bus_power
             total_power *= v_k
-            gen_mw = false_attack_state[k_base_idx + 2]
+            gen_mw = false_attack_state[k_base_idx + 1]
             false_attack_state[k_base_idx + 3] = gen_mw - total_power
 
             # reactive power
@@ -101,11 +122,12 @@ def generate_fdia(conf):
             theta_k = attack_state[k_base_idx + 4]
             v_k = attack_state[k_base_idx + 5]
             for bus_j in range(n_buses):
+
                 j_base_idx = 6 * bus_j
                 theta_j = attack_state[j_base_idx + 4]
                 v_j = attack_state[j_base_idx + 5]
                 radians = (np.pi / 180) * (theta_k - theta_j)
-                admittance = attack_state[admittance_base + bus_j]
+                admittance = attack_state[ybus_base + bus_j]
                 bus_power = v_j * (admittance.real * np.sin(radians)
                                    - admittance.imag * np.cos(radians))
                 total_power += bus_power
@@ -122,7 +144,7 @@ def generate_fdia(conf):
                 theta_j = false_attack_state[j_base_idx + 4]
                 v_j = false_attack_state[j_base_idx + 5]
                 radians = (np.pi / 180) * (theta_k - theta_j)
-                admittance = false_attack_state[admittance_base + bus_j]
+                admittance = false_attack_state[ybus_base + bus_j]
                 bus_power = v_j * (admittance.real * np.sin(radians)
                                    - admittance.imag * np.cos(radians))
                 total_power += bus_power
@@ -131,8 +153,7 @@ def generate_fdia(conf):
             false_attack_state[k_base_idx + 2] = gen_mvar - total_power
 
         # a = h(x\hat + c) - h(x\hat)
-        attack = false_attack_state - attack_state
-
+        attack = false_attack_state[:6 * n_buses] - attack_state[:6 * n_buses]
         # z_a = true_state + a
         state = np.copy(true_state)
         for bus in range(n_buses):
@@ -141,9 +162,28 @@ def generate_fdia(conf):
             state[k_base_idx + 2: k_base_idx + 3] += attack[k_base_idx + 2: k_base_idx + 3]
         
         state[-2] = "yes"
-        state[-1] = attacked_bus
-        test(state, n_buses)
-        new_states = np.vstack((new_states, state))
+        attacked = []
+        for bus in range(n_buses):
+            # real
+            if attack[6 * bus + 3] > 0:
+                attacked.append(2 * bus + 1)
+
+            # reactive
+            if attack[6 * bus + 2] > 0:
+                attacked.append(2 * bus)
+
+        state[-1] = attacked
+        # test(true_state, n_buses)
+        # Convert units
+        for bus in range(n_buses):
+            bus_base_idx = 6 * bus
+            for i in range(4):
+                state[bus_base_idx + i] *= mva_base
+
+        state = np.hstack((np.array(["Date", "Time"]), state))
+        new_states.append(state)
+
+    new_states = np.row_stack(new_states)
 
     attacks = pd.DataFrame(new_states, columns=base_states_pd.columns)
     attacks.to_csv(conf["data"]["attack"], index=False)
@@ -162,53 +202,53 @@ def test(state, n_buses):
 
     for bus in reversed(range(n_buses)):
         bus_idx = 6 * bus
-        state = np.delete(state, bus_idx + 3, axis=1)
-        state = np.delete(state, bus_idx + 2, axis=1)
+        state = np.delete(state, bus_idx + 3, axis=0)
+        state = np.delete(state, bus_idx + 2, axis=0)
 
     # Real power
     total_loss = 0
     for bus_k in range(n_buses):
         bus_loss = 0
-        admittance_base = 4 * n_buses + bus_k * n_buses
-        k_bus_base = 4 * bus_k
-        power_k = state[k_bus_base + 1]
-        theta_k = state[k_bus_base + 2]
-        v_k = state[k_bus_base + 3]
+        ybus_base = 4 * n_buses + bus_k * n_buses
+        k_base_idx = 4 * bus_k
+        power_k = state[k_base_idx + 1]
+        theta_k = state[k_base_idx + 2]
+        v_k = state[k_base_idx + 3]
         for bus_j in range(n_buses):
-            j_bus_base = 4 * bus_j
-            theta_j = state[j_bus_base + 2]
-            v_j = state[j_bus_base + 3]
+            j_base_idx = 4 * bus_j
+            theta_j = state[j_base_idx + 2]
+            v_j = state[j_base_idx + 3]
             radians = (np.pi / 180) * (theta_k - theta_j)
-            admittance = state[admittance_base + bus_j]
+            admittance = state[ybus_base + bus_j]
             bus_power = v_j * (admittance.real * np.cos(radians)
                                + admittance.imag * np.sin(radians))
             bus_loss += bus_power
         bus_loss *= v_k
         bus_loss -= power_k
-        total_loss += bus_loss
+        total_loss += np.abs(bus_loss)
     average_real_power_loss = total_loss / n_buses
     print("Average real loss:", average_real_power_loss)
 
+    # Reactive power
     total_loss = 0
     for bus_k in range(n_buses):
-        buss_loss = 0
-        admittance_base = 4 * n_buses + bus_k * n_buses
-        k_bus_base = 4 * bus_k
-        power_k = state[k_bus_base + 1]
-        theta_k = state[k_bus_base + 2]
-        v_k = state[k_bus_base + 3]
+        bus_loss = 0
+        ybus_base = 4 * n_buses + bus_k * n_buses
+        k_base_idx = 4 * bus_k
+        power_k = state[k_base_idx]
+        theta_k = state[k_base_idx + 2]
+        v_k = state[k_base_idx + 3]
         for bus_j in range(n_buses):
-            j_bus_base = 4 * bus_j
-            theta_j = state[j_bus_base + 2]
-            v_j = state[j_bus_base + 3]
+            j_base_idx = 4 * bus_j
+            theta_j = state[j_base_idx + 2]
+            v_j = state[j_base_idx + 3]
             radians = (np.pi / 180) * (theta_k - theta_j)
-            admittance = state[admittance_base + bus_j]
+            admittance = state[ybus_base + bus_j]
             bus_power = v_j * (admittance.real * np.sin(radians)
                                - admittance.imag * np.cos(radians))
             bus_loss += bus_power
         bus_loss *= v_k
         bus_loss -= power_k
-        total_loss += bus_loss
+        total_loss += np.abs(bus_loss)
     average_reactive_power_loss = total_loss / n_buses
     print("Average reactive loss:", average_reactive_power_loss)
-            

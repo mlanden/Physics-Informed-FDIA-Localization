@@ -17,16 +17,15 @@ import ray
 from ray import tune
 from ray.train import ScalingConfig, RunConfig, CheckpointConfig
 from ray.train.torch import TorchTrainer
-from ray.tune import CLIReporter
 from ray.tune.tune_config import TuneConfig
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 
 from datasets import GridDataset, GridGraphDataset
-from training import PINNTrainer
+from training import PINNTrainer, LocalizationTrainer
 from equations import build_equations
 from utils import generate_fdia
 
-def train(config=None):
+def train_pinn(config=None):
     if config is not None:
         conf["model"]["n_heads"] = config.get("n_heads", conf["model"]["n_heads"])
         conf["model"]["hidden_size"] = config.get("size", conf["model"]["hidden_size"])
@@ -34,25 +33,37 @@ def train(config=None):
         conf["train"]["regularization"] = config["regularization"]
 
     if use_graph:
-        dataset = GridGraphDataset(conf, conf["data"]["normal"], True)
+        dataset = GridGraphDataset(conf, conf["data"]["normal"])
     else:
         dataset = GridDataset(conf, conf["data"]["normal"], True)
-    datalen = len(dataset)
-    train_len = int(datalen * train_fraction)
-    train_idx = list(range(train_len))
-    train_data = Subset(dataset, train_idx)
-    print("Training data size:", len(train_data))
-    val_len = int(datalen * validate_fraction)
-    val_idx = list(range(train_len, train_len + val_len))
-    validation_data = Subset(dataset, val_idx)
-    
+
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_fraction, validate_fraction])
     trainer = PINNTrainer(conf, dataset)
     if ray.is_initialized():
-        trainer.train(0, train_data, validation_data)
+        trainer.train(0, train_dataset, val_dataset)
     else:
-        mp.spawn(trainer.train, args=(train_data, validation_data),
+        mp.spawn(trainer.train, args=(train_dataset, val_dataset),
                 nprocs=gpus,
                 join=True)
+
+def train_localize(config=None):
+    dataset = GridGraphDataset(conf, conf["data"]["attack"])
+    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_fraction, validate_fraction])
+    trainer = LocalizationTrainer(conf)
+    if ray.is_initialized():
+        trainer.train(0, train_dataset, val_dataset)
+    else:
+        mp.spawn(trainer.train, args=(train_dataset, val_dataset),
+                 nprocs=gpus,
+                 join=True)
+
+
+def localize():
+    dataset = GridGraphDataset(conf, conf["data"]["test"])
+    trainer = LocalizationTrainer(conf)
+    mp.spawn(trainer.localize, args=(dataset,),
+             nprocs=gpus,
+             join=True)
     
 def get_normal_profile():
     if use_graph:
@@ -117,7 +128,7 @@ def hyperparameter_optimize():
         )
     
     trainer = TorchTrainer(
-        train,
+        train_pinn,
         scaling_config=ScalingConfig(num_workers=1, use_gpu=conf["train"]["cuda"]))
     
     if conf["train"]["load_checkpoint"]:
@@ -143,7 +154,7 @@ def hyperparameter_optimize():
     )
     
     results = tuner.fit()
-    best_trial = results.get_best_result("loss", "min")
+    best_trial = results.et_best_result("loss", "min")
     print(f"Best trial config: {best_trial.config}")
     print(f"Best trial checkpoint: {best_trial.path}")
 
@@ -166,8 +177,12 @@ if __name__ == '__main__':
     gpus = conf["train"]["gpus"]
     use_graph = conf["model"]["graph"]
 
-    if task == "train":
-        train()
+    if task == "train_pinn":
+        train_pinn()
+    elif task == "train_localize":
+        train_localize()
+    elif task == "localize":
+        localize()
     elif task == "error":
         get_normal_profile()
     elif task == "test":

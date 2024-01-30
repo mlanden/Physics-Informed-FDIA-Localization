@@ -15,12 +15,11 @@ class GridDataset(ICSDataset):
         self.n_buses = conf["data"]["n_buses"]
         self.powerworld = conf["data"]["powerworld"]
 
-        self.features = self.data.iloc[:, 2: -1].to_numpy()
-        self.labels = self.data.iloc[:, -1] == "Yes"
+        self.features = self.data.iloc[:, 2: -2].to_numpy()
+        self.labels = self.data.iloc[:, -2] == "Yes"
         self.labels = self.labels.to_numpy()
         self._per_unit()
         self.features = self.features.astype(np.float32)
-        print(np.min(self.features), np.max(self.features))
 
         self.input_mask = []
         self.output_mask = []
