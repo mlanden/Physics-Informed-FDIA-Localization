@@ -1,4 +1,3 @@
-import torch.nn.functional as F
 import torch.nn as nn
 import torch_geometric.nn as gnn
 
@@ -6,26 +5,35 @@ import torch_geometric.nn as gnn
 class GCN(nn.Module):
     def __init__(self, conf, n_inputs, n_outputs, dense=False) -> None:
         super().__init__()
-        self.hidden_size = conf["model"]["hidden_size"]
-        self.n_heads = conf["model"]["n_heads"]
+        hidden_size = conf["model"]["hidden_size"]
+        n_heads = conf["model"]["n_heads"]
         dropout = conf["model"]["dropout"]
+        n_layers = conf["model"]["n_layers"]
         self.dense = dense
-        self.n_buses = conf["data"]["n_buses"]
-        self.conv1 = gnn.GATConv(n_inputs, self.hidden_size, self.n_heads, dropout=dropout)
-        self.conv2 = gnn.GATConv(self.hidden_size * self.n_heads, n_outputs,
-                                  self.n_heads, concat=False, dropout=dropout)
+        n_buses = conf["data"]["n_buses"]
+        self.gnns = nn.ModuleList()
+        for i in range(n_layers):
+            if i < n_layers - 1:
+                concat = True
+            else:
+                concat = dense
+            self.gnns.append(gnn.GATConv(n_inputs if i == 0 else hidden_size * n_heads,
+                                         hidden_size if i < n_layers - 1 else n_outputs,
+                                         n_heads, dropout=dropout, concat=concat))
         if self.dense:
-            self.classify = nn.Linear(n_outputs * self.n_buses, 2 * self.n_buses)
+            self.classify = nn.Linear(n_outputs * n_buses * n_heads, 2 * n_buses)
 
     def forward(self, data):
         x = data.x
         edge_index = data.edge_index
         edge_attr = data.edge_attr
-        h = self.conv1(x, edge_index, edge_attr)
-        h = h.relu()
-        h = self.conv2(h, edge_index, edge_attr)
+
+        for i, layer in enumerate(self.gnns):
+            x = layer(x, edge_index, edge_attr)
+            if i < len(self.gnns) - 1:
+                x = x.relu()
         if self.dense:
-            h = h.view(-1, self.classify.in_features)
-            logits = self.classify(h)
+            x = x.view(-1, self.classify.in_features)
+            logits = self.classify(x)
             return logits
-        return h
+        return x

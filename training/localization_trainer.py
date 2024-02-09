@@ -1,9 +1,10 @@
+import copy
 import  os
 import tempfile
 from os import path
 import ray
 from ray import train
-from sklearn.metrics import confusion_matrix, roc_curve
+from sklearn.metrics import multilabel_confusion_matrix, precision_score, recall_score, f1_score, roc_curve
 import numpy as np
 import torch
 from torch.utils.data import DataLoader, DistributedSampler
@@ -15,7 +16,6 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from models import GCN
-from equations import build_equations
 
 class LocalizationTrainer:
 
@@ -23,12 +23,12 @@ class LocalizationTrainer:
         self.conf = conf
         self.batch_size = conf["train"]["batch_size"]
         self.checkpoint_dir = path.join(conf["train"]["checkpoint_dir"], conf["train"]["checkpoint"])
-        self.pinn_model_path = path.join(self.checkpoint_dir, "pinn.pt") 
-        self.localize_model_path = path.join(self.checkpoint_dir, "localize.pt")
+        self.pinn_model_path = path.join(self.checkpoint_dir, "pinn.pt")
+        self.model_name = "localize.pt"
+        self.localize_model_path = path.join(self.checkpoint_dir, self.model_name)
         self.size = self.conf["train"]["gpus"]
 
-        self.pinn_model = GCN(self.conf, 2, 2)
-        self.localize_model = GCN(self.conf, 2, self.conf["model"]["hidden_size"], dense=True)
+        self.localize_model = GCN(self.conf, 4, self.conf["model"]["hidden_size"], dense=True)
 
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
@@ -40,14 +40,14 @@ class LocalizationTrainer:
                 backend = "gloo"
             dist.init_process_group(backend, rank=rank, world_size=self.size)
             if backend == "gloo":
-                self.model = torch.nn.parallel.DistributedDataParallel(self.localize_model)
+                self.localize_model = torch.nn.parallel.DistributedDataParallel(self.localize_model)
             else:
-                self.model = torch.nn.parallel.DistributedDataParallel(self.localize_model,
-                                                                        device_ids=[rank],
-                                                                        output_device=rank)
+                self.localize_model = torch.nn.parallel.DistributedDataParallel(self.localize_model,
+                                                                                device_ids=[rank],
+                                                                                output_device=rank)
         else:
             if not train.get_checkpoint():
-                self.model = train.torch.prepare_model(self.model)
+                self.localize_model = train.torch.prepare_model(self.localize_model)
 
         loaders = []
         for dataset, shuffle in zip(datasets, shuffles):
@@ -70,8 +70,11 @@ class LocalizationTrainer:
                 print("PINN model does not exist")
             return
         
-        self.pinn_model_ckpt = torch.load(self.pinn_model_path)
-        self.pinn_model.load_state_dict(self.pinn_model_ckpt["model"])
+        pinn_ckpt = torch.load(self.pinn_model_path)
+        conf = copy.deepcopy(self.conf)
+        conf["model"] = pinn_ckpt["structure"]
+        self.pinn_model = GCN(conf, 2, 2)
+        self.pinn_model.load_state_dict(pinn_ckpt["model"])
         self.pinn_model.eval()
 
         optim = torch.optim.Adam(self.localize_model.parameters(), 
@@ -83,19 +86,18 @@ class LocalizationTrainer:
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         self.pinn_model = self.pinn_model.to(device)
         self.localize_model = self.localize_model.to(device)
-
         checkpoint = None
         if ray.ray.is_initialized():
             checkpoint = train.get_checkpoint()
             if checkpoint:
                 with checkpoint.as_directory() as checkpoint_dir:
                     checkpoint = torch.load(path.join(checkpoint_dir, self.model_name))
-        elif self.conf["train"]["load_checkpoint"] and path.exists(self.checkpoint_path):
-            checkpoint = torch.load(self.checkpoint_path)
+        elif self.conf["train"]["load_checkpoint"] and path.exists(self.localize_model_path):
+            checkpoint = torch.load(self.localize_model_path)
         
         if checkpoint is not None:
             start_epoch = checkpoint["epoch"]
-            self.model.load_state_dict(checkpoint["model"])
+            self.localize_model.load_state_dict(checkpoint["model"])
             optim.load_state_dict(checkpoint["optim"])
             scheduler.load_state_dict(checkpoint["schedule"])
             best_loss = checkpoint["loss"]
@@ -103,7 +105,7 @@ class LocalizationTrainer:
         train_loader, val_loader = self._init_ddp(rank, [train_dataset, val_dataset], [True, False])
         rank = dist.get_rank()
         if rank == 0:
-            print(self.model)
+            print(self.localize_model)
         epochs = self.conf["train"]["epochs"]
 
         if rank == 0 and not ray.is_initialized():
@@ -114,6 +116,7 @@ class LocalizationTrainer:
             print("Version:", version)
             tb_writer = SummaryWriter(path.join(tb_dir, f"version_{version}"))
 
+        torch.autograd.set_detect_anomaly(True)
         for epoch in range(start_epoch, epochs):
             self.localize_model.train()
             train_loader.sampler.set_epoch(epoch)
@@ -127,10 +130,15 @@ class LocalizationTrainer:
                 data = data.to(device)
 
                 embedding = self.pinn_model(data)
-                data.x = embedding
+                if torch.any(torch.isinf(embedding)):
+                    print("Embed", embedding)
+
+                data.x = torch.hstack((data.x, embedding))
                 logits = self.localize_model(data)
-                loss = loss_fn(logits, data.classes)
+                loss = loss_fn(logits + 1e-10, data.classes)
                 loss.backward()
+                if self.conf["train"]["max_norm"] > 0:
+                    torch.nn.utils.clip_grad.clip_grad_norm_(self.localize_model.parameters(), self.conf["train"]["max_norm"])
                 optim.step()
                 total_loss += loss.detach()
 
@@ -155,11 +163,11 @@ class LocalizationTrainer:
                 for data in loader:
                     data = data.to(device)
                     embedding = self.pinn_model(data)
-                    data.x = embedding
+                    data.x = torch.hstack((data.x, embedding))
                     logits = self.localize_model(data)
-                    loss = loss_fn(logits, data.classes)
+                    loss = loss_fn(logits + 1e-10, data.classes)
                     total_loss += loss
-
+    
                     if rank == 0 and not ray.is_initialized():
                         loader.set_description(f"Val Epoch [{epoch: 3d}/{epochs}]")
                         loader.set_postfix(loss=loss.item())
@@ -176,11 +184,11 @@ class LocalizationTrainer:
                         tb_writer.add_scalar("Learning Rate", lr, epoch)
                         tb_writer.add_scalar("Validation Loss", total_loss, epoch)
 
-                    if loss < best_loss:
+                    if loss < best_loss or ray.is_initialized():
                         try:
-                            model = self.model.module
+                            model = self.localize_model.module
                         except AttributeError:
-                            model = self.model
+                            model = self.localize_model
                         checkpoint = {
                             "model": model.state_dict(),
                             "optim": optim.state_dict(),
@@ -207,7 +215,11 @@ class LocalizationTrainer:
 
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         pinn_ckpt = torch.load(self.pinn_model_path)
+        conf = copy.deepcopy(self.conf)
+        conf["model"] = pinn_ckpt["structure"]
+        self.pinn_model = GCN(conf, 2, 2)
         self.pinn_model.load_state_dict(pinn_ckpt["model"])
+        self.pinn_model.eval()
         localize_chpt = torch.load(self.localize_model_path)
         self.localize_model.load_state_dict(localize_chpt["model"])
         self.pinn_model = self.pinn_model.to(device)
@@ -217,6 +229,8 @@ class LocalizationTrainer:
 
         loader = self._init_ddp(rank, [dataset], [False])[0]
         predicted = []
+        truth = []
+        thresholds = []
         if rank == 0:
             data_loader = tqdm(loader)
         else:
@@ -225,7 +239,54 @@ class LocalizationTrainer:
             for data in data_loader:
                 data = data.to(device)
                 embedding = self.pinn_model(data)
-                data.x = embedding
+                data.x = torch.hstack((data.x, embedding))
                 logits = self.localize_model(data)
-                prediction = torch.sigmoid(logits)
-                predicted.append(prediction)
+                threshold = torch.sigmoid(logits + 1e-10)
+                prediction = threshold > 0.5
+                thresholds.append(threshold)
+                predicted.append(prediction.float())
+                truth.append(data.classes)
+            thresholds = torch.cat(thresholds)
+            predicted = torch.cat(predicted)
+            truth = torch.cat(truth)
+
+            if rank == 0:
+                if self.size > 1:
+                    print("Gathering")
+                    all_predicted = [torch.empty(predicted.size(), device=device)
+                                    for _ in range(self.size)]
+                    dist.gather(predicted, all_predicted, 0)
+                    predicted = torch.cat(all_predicted).cpu()
+                    all_truth = [torch.empty(truth.size(), device=device)
+                                for _ in range(self.size)]
+                    dist.gather(truth, all_truth, 0)
+                    truth = torch.cat(all_truth).cpu()
+                else:
+                    truth = truth.cpu()
+                    predicted = predicted.cpu()
+
+                true_y = truth.flatten()
+                scores = thresholds.cpu().flatten()
+                fpr, tpr, thresholds = roc_curve(true_y, scores)
+                plt.plot(fpr, tpr)
+                plt.grid(True)
+                plt.savefig("roc.png")
+
+                recall = recall_score(truth, predicted, average=self.conf["train"]["average"])
+                precision = precision_score(truth, predicted, average=self.conf["train"]["average"])
+                f1score = f1_score(truth, predicted, average=self.conf["train"]["average"])
+
+                confusion_matrixs = multilabel_confusion_matrix(truth, predicted)
+                false_positive_rates = []
+                for i in range(len(confusion_matrixs[0])):
+                    tn, fp, fn, tp = confusion_matrixs[i].ravel()
+                    fpr = fp / (fp + tn) if fp + tn != 0 else 0
+                    false_positive_rates.append(fpr)
+                avg_fpr = np.mean(false_positive_rates)
+                print(f"Recall: {recall * 100}")
+                print(f"Precision: {precision * 100}")
+                print(f"F1 score: {f1score * 100}")
+                print(f"False positive rate: {avg_fpr}")
+            elif self.size > 1:
+                dist.gather(predicted, [], 0)
+                dist.gather(truth, [], 0)

@@ -19,16 +19,18 @@ from ray.train import ScalingConfig, RunConfig, CheckpointConfig
 from ray.train.torch import TorchTrainer
 from ray.tune.tune_config import TuneConfig
 from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
+from ray.tune.search.hyperopt import HyperOptSearch
 
 from datasets import GridDataset, GridGraphDataset
 from training import PINNTrainer, LocalizationTrainer
 from equations import build_equations
 from utils import generate_fdia
 
-def train_pinn(config=None):
+def train_pinn(config: dict=None):
     if config is not None:
         conf["model"]["n_heads"] = config.get("n_heads", conf["model"]["n_heads"])
         conf["model"]["hidden_size"] = config.get("size", conf["model"]["hidden_size"])
+        conf["model"]["n_layers"] = config.get("n_layers", conf["model"]["n_layers"])
         conf["train"]["lr"] = config["lr"]
         conf["train"]["regularization"] = config["regularization"]
 
@@ -42,11 +44,17 @@ def train_pinn(config=None):
     if ray.is_initialized():
         trainer.train(0, train_dataset, val_dataset)
     else:
-        mp.spawn(trainer.train, args=(train_dataset, val_dataset),
+        mp.spawn(trainer.train, args=(train_dataset[:50000], val_dataset),
                 nprocs=gpus,
                 join=True)
 
-def train_localize(config=None):
+def train_localize(config: dict=None):
+    if config is not None:
+        conf["model"]["n_heads"] = config.get("n_heads", conf["model"]["n_heads"])
+        conf["model"]["hidden_size"] = config.get("size", conf["model"]["hidden_size"])
+        conf["model"]["n_layers"] = config.get("n_layers", conf["model"]["n_layers"])
+        conf["train"]["lr"] = config["lr"]
+        conf["train"]["regularization"] = config["regularization"]
     dataset = GridGraphDataset(conf, conf["data"]["attack"])
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_fraction, validate_fraction])
     trainer = LocalizationTrainer(conf)
@@ -67,7 +75,7 @@ def localize():
     
 def get_normal_profile():
     if use_graph:
-        dataset = GridGraphDataset(conf, conf["data"]["normal"], True)
+        dataset = GridGraphDataset(conf, conf["data"]["normal"])
     else:
         dataset = GridDataset(conf, conf["data"]["normal"], True)
     start = int((train_fraction + validate_fraction) * len(dataset))
@@ -93,20 +101,24 @@ def detect():
     
 def hyperparameter_optimize():
     conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
+    conf["data"]["attack"] = path.abspath(conf["data"]["attack"])
     conf["data"]["ybus"] = path.abspath(conf["data"]["ybus"])
     conf["data"]["types"] = path.abspath(conf["data"]["types"])
     conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
+    conf["train"]["tune_checkpoint"] = path.abspath(conf["train"]["tune_checkpoint"])
     population_training = conf["train"].get("population_train", 1)
     config = {
         "lr": tune.loguniform(1e-4, 1e-1),
         "dropout": tune.uniform(0.1, 0.8),
         "regularization": tune.loguniform(1e-5, 1e-1)
     }
+    algo = HyperOptSearch(metric="loss", mode="min")
 
     if not population_training:
         config.update({
             "n_heads": tune.choice([i for i in range(2, 9)]),
-            "size": tune.choice([2 ** i for i in range(9)]),
+            "size": tune.choice([2 ** i for i in range(4, 8)]),
+            "n_layers": tune.choice([i for i in range(2, 8)])
         })
     if not population_training:
         scheduler = ASHAScheduler(
@@ -127,13 +139,17 @@ def hyperparameter_optimize():
             }
         )
     
+    if conf["train"]["tuned"] == "pinn":
+        tunable = train_pinn
+    else:
+        tunable = train_localize
     trainer = TorchTrainer(
-        train_pinn,
+        tunable,
         scaling_config=ScalingConfig(num_workers=1, use_gpu=conf["train"]["cuda"]))
     
     if conf["train"]["load_checkpoint"]:
         tuner = tune.Tuner.restore(
-            conf["train"]["checkpoint_dir"],
+            conf["train"]["tune_checkpoint"],
             trainer
         )
     else:
@@ -144,7 +160,8 @@ def hyperparameter_optimize():
         },
         tune_config=TuneConfig(
             num_samples=conf["train"]["num_samples"],
-            scheduler=scheduler
+            scheduler=scheduler,
+            search_alg=algo
         ),
         run_config=RunConfig(storage_path=path.abspath("./checkpoint"),
                              checkpoint_config=CheckpointConfig(num_to_keep=4, 
@@ -154,7 +171,7 @@ def hyperparameter_optimize():
     )
     
     results = tuner.fit()
-    best_trial = results.et_best_result("loss", "min")
+    best_trial = results.get_best_result("loss", "min")
     print(f"Best trial config: {best_trial.config}")
     print(f"Best trial checkpoint: {best_trial.path}")
 

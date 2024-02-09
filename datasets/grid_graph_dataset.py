@@ -5,6 +5,7 @@ import pandas as pd
 from typing import List, Tuple, Union
 import torch
 from torch_geometric.data import Data, InMemoryDataset
+from tqdm import tqdm
 
 from .grid_dataset import GridDataset
 from utils import to_complex
@@ -136,7 +137,7 @@ class GridGraphDataset(InMemoryDataset):
         self.input_mask.extend(list(range(4 * self.n_buses, len(self.features[0]))))
 
         grids = []
-        for graph in range(len(self.features)):
+        for graph in tqdm(range(len(self.features))):
             nodes = self.features[graph, self.input_mask][:2 * self.n_buses].reshape(self.n_buses, 2)
             location = self.locations[graph]
             classes = torch.zeros(2 * self.n_buses)

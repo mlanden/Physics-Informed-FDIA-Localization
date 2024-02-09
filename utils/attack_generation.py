@@ -1,7 +1,6 @@
 import pandas as pd
 import numpy as np
-from torch import ge
-
+from tqdm import tqdm
 from utils import to_complex
 
 
@@ -17,7 +16,7 @@ def generate_fdia(conf):
 
 
     new_states = []
-    for i in range(len(base_states)):
+    for i in tqdm(range(len(base_states))):
         # Add the non attack state
         new_states.append(base_states[i])
 

@@ -134,6 +134,8 @@ class PINNTrainer:
                     targets = data.y
                 data_loss, physics_loss, loss = self._combine_losses(inputs, targets)
                 loss.backward()
+                if self.conf["train"]["max_norm"] > 0:
+                    torch.nn.utils.clip_grad.clip_grad_norm_(self.model.parameters(), self.conf["train"]["max_norm"])
                 optim.step()
                 total_loss += loss.detach()
                 if rank == 0 and not ray.is_initialized():
@@ -203,13 +205,14 @@ class PINNTrainer:
                             tb_writer.add_scalar("Data loss", total_data_loss, epoch)
                             tb_writer.add_scalar("Physics loss", total_physics_loss, epoch)
 
-                    if loss < best_loss:
+                    if loss < best_loss or ray.is_initialized() or 1:
                         try:
                             model = self.model.module
                         except AttributeError:
                             model = self.model
                         checkpoint = {
                             "model": model.state_dict(),
+                            "structure": self.conf["model"],
                             "optim": optim.state_dict(),
                             "schedule": scheduler.state_dict(),
                             "loss": total_loss.item(),
@@ -233,6 +236,7 @@ class PINNTrainer:
             return
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         checkpoint = torch.load(self.checkpoint_path)
+        print(checkpoint["structure"], flush=True)
         self.model.load_state_dict(checkpoint["model"])
         self.model.eval()
         if rank == 0:

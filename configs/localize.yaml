@@ -1,9 +1,9 @@
 task: train_pinn
-task: train_localize
+# task: train_localize
 # task: localize
 # task: error
 # task: test
-task: "hyperparameter_optimize"
+# task: "hyperparameter_optimize"
 # task: equations
 # task: equ_error
 # task: attack_generation
@@ -35,40 +35,38 @@ attack:
   # network_parameter_error: 0
   # state_variable_error: 0
 model:
-  hidden_size: 128
+  hidden_size: 20
   layer_sizes: [40, 20, 10]
   n_layers: 6
   sequence_length: 10
   activation: relu
   profile_type: mean
 #  profile_type: gmm
-  dropout: 0.1142
+  dropout: 0.339
   threshold: 6.78
   graph: 1
-  n_heads: 2
+  n_heads: 8
 
 train:
   cuda: 1
   gpus: 4
   nodes: 1
   batch_size: 64
-  epochs: 800
-  lr: 0.00566
-  max_norm: 1
+  epochs: 100
+  lr: 0.00228
   # Cube sampling 
   # lr: 0.01
   scale: [0.1, 1]
   average: micro
-  regularization: 0.01
+  regularization: 0.00005559
   num_samples: 20
-  checkpoint: grid_14_continuous_admittance
+  checkpoint: grid_14_normal_topology
   # checkpoint: test
-  checkpoint_dir: checkpoint/
-  tune_checkpoint: checkpoint/TorchTrainer_2024-02-07_22-20-30
-  load_checkpoint: 0
-  tuned: pinn
-  train_fraction: 0.8
-  validate_fraction: 0.2
+  checkpoint_dir: checkpoint
+  load_checkpoint: 1
+  tuned: localization
+  train_fraction: 0.7
+  validate_fraction: 0.3
   find_error_fraction: 0.25
   # train_fraction: 0
   # validate_fraction: 0
