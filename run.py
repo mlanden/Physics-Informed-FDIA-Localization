@@ -112,6 +112,8 @@ def hyperparameter_optimize():
         "dropout": tune.uniform(0.1, 0.8),
         "regularization": tune.loguniform(1e-5, 1e-1)
     }
+    ray.init(_temp_dir=path.abspath("../ray"))
+
     algo = HyperOptSearch(metric="loss", mode="min")
 
     if not population_training:

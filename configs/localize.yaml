@@ -63,7 +63,7 @@ train:
   checkpoint: grid_14_normal_topology
   # checkpoint: test
   checkpoint_dir: checkpoint
-  load_checkpoint: 1
+  load_checkpoint: 0
   tuned: localization
   train_fraction: 0.7
   validate_fraction: 0.3

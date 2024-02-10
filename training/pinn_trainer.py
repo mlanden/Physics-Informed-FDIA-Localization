@@ -122,6 +122,7 @@ class PINNTrainer:
             else:
                 loader = train_loader
             total_loss = 0
+            
             for data in loader:
                 optim.zero_grad()
                 if not self.use_graph:
