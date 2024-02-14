@@ -36,9 +36,9 @@ attack:
   # network_parameter_error: 0
   # state_variable_error: 0
 model:
-  hidden_size: 32
+  hidden_size: 64
   layer_sizes: [40, 20, 10]
-  n_layers: 3
+  n_layers: 7
   sequence_length: 10
   activation: relu
   profile_type: mean
@@ -46,7 +46,7 @@ model:
   dropout: 0.56
   threshold: 6.78
   graph: 1
-  n_heads: 6
+  n_heads: 3
 
 train:
   cuda: 1

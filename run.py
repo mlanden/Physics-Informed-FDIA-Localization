@@ -44,7 +44,7 @@ def train_pinn(config: dict=None):
     if ray.is_initialized():
         trainer.train(0, train_dataset, val_dataset)
     else:
-        mp.spawn(trainer.train, args=(train_dataset[:50000], val_dataset),
+        mp.spawn(trainer.train, args=(train_dataset, val_dataset),
                 nprocs=gpus,
                 join=True)
 

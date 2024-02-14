@@ -261,12 +261,17 @@ class LocalizationTrainer:
                                 for _ in range(self.size)]
                     dist.gather(truth, all_truth, 0)
                     truth = torch.cat(all_truth).cpu()
+                    all_thresholds = [torch.empty(thresholds.size(), device=device)
+                                  for _ in range(self.size)]
+                    dist.gather(thresholds, all_thresholds, 0)
+                    thresholds = torch.cat(all_thresholds).cpu()
                 else:
                     truth = truth.cpu()
                     predicted = predicted.cpu()
+                    thresholds = thresholds.cpu()
 
                 true_y = truth.flatten()
-                scores = thresholds.cpu().flatten()
+                scores = thresholds.flatten()
                 fpr, tpr, thresholds = roc_curve(true_y, scores)
                 plt.plot(fpr, tpr)
                 plt.grid(True)
@@ -286,7 +291,8 @@ class LocalizationTrainer:
                 print(f"Recall: {recall * 100}")
                 print(f"Precision: {precision * 100}")
                 print(f"F1 score: {f1score * 100}")
-                print(f"False positive rate: {avg_fpr}")
+                print(f"False positive rate: {avg_fpr * 100}")
             elif self.size > 1:
                 dist.gather(predicted, [], 0)
                 dist.gather(truth, [], 0)
+                dist.gather(thresholds, [], 0)

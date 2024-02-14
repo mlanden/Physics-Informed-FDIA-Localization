@@ -122,7 +122,7 @@ class PINNTrainer:
             else:
                 loader = train_loader
             total_loss = 0
-            
+
             for data in loader:
                 optim.zero_grad()
                 if not self.use_graph:
@@ -237,7 +237,7 @@ class PINNTrainer:
             return
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         checkpoint = torch.load(self.checkpoint_path)
-        print(checkpoint["structure"], flush=True)
+        print(checkpoint["structure"])
         self.model.load_state_dict(checkpoint["model"])
         self.model.eval()
         if rank == 0:
