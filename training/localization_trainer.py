@@ -16,6 +16,8 @@ from tqdm import tqdm
 import matplotlib.pyplot as plt
 
 from models import GCN
+from equations import build_equations
+
 
 class LocalizationTrainer:
 
@@ -27,7 +29,6 @@ class LocalizationTrainer:
         self.model_name = "localize.pt"
         self.localize_model_path = path.join(self.checkpoint_dir, self.model_name)
         self.size = self.conf["train"]["gpus"]
-
         self.localize_model = GCN(self.conf, 4, self.conf["model"]["hidden_size"], dense=True)
 
     def _init_ddp(self, rank, datasets, shuffles):
@@ -69,13 +70,6 @@ class LocalizationTrainer:
             if rank == 0:
                 print("PINN model does not exist")
             return
-        
-        pinn_ckpt = torch.load(self.pinn_model_path)
-        conf = copy.deepcopy(self.conf)
-        conf["model"] = pinn_ckpt["structure"]
-        self.pinn_model = GCN(conf, 2, 2)
-        self.pinn_model.load_state_dict(pinn_ckpt["model"])
-        self.pinn_model.eval()
 
         optim = torch.optim.Adam(self.localize_model.parameters(), 
                                  lr=self.conf["train"]["lr"],
@@ -84,7 +78,6 @@ class LocalizationTrainer:
         loss_fn = torch.nn.BCEWithLogitsLoss()
         
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
-        self.pinn_model = self.pinn_model.to(device)
         self.localize_model = self.localize_model.to(device)
         checkpoint = None
         if ray.ray.is_initialized():
@@ -129,13 +122,8 @@ class LocalizationTrainer:
                 optim.zero_grad()
                 data = data.to(device)
 
-                embedding = self.pinn_model(data)
-                if torch.any(torch.isinf(embedding)):
-                    print("Embed", embedding)
-
-                data.x = torch.hstack((data.x, embedding))
                 logits = self.localize_model(data)
-                loss = loss_fn(logits + 1e-10, data.classes)
+                loss = loss_fn(logits, data.classes)
                 loss.backward()
                 if self.conf["train"]["max_norm"] > 0:
                     torch.nn.utils.clip_grad.clip_grad_norm_(self.localize_model.parameters(), self.conf["train"]["max_norm"])
@@ -162,8 +150,6 @@ class LocalizationTrainer:
                 total_loss = 0
                 for data in loader:
                     data = data.to(device)
-                    embedding = self.pinn_model(data)
-                    data.x = torch.hstack((data.x, embedding))
                     logits = self.localize_model(data)
                     loss = loss_fn(logits + 1e-10, data.classes)
                     total_loss += loss
@@ -238,8 +224,9 @@ class LocalizationTrainer:
         with torch.no_grad():
             for data in data_loader:
                 data = data.to(device)
-                embedding = self.pinn_model(data)
-                data.x = torch.hstack((data.x, embedding))
+                data = self.embed(data)
+                # embedding = self.pinn_model(data)
+                # data.x = torch.hstack((data.x, embedding))
                 logits = self.localize_model(data)
                 threshold = torch.sigmoid(logits + 1e-10)
                 prediction = threshold > 0.5
@@ -296,3 +283,14 @@ class LocalizationTrainer:
                 dist.gather(predicted, [], 0)
                 dist.gather(truth, [], 0)
                 dist.gather(thresholds, [], 0)
+
+    @torch.no_grad
+    def embed(self, data):
+        pinn_output = self.pinn_model(data)
+        physics_loss = torch.zeros((len(data), len(self.equations)), 
+                                   device=pinn_output.device)
+        for i, equation in enumerate(self.equations):
+            physics_loss[:, i] = equation.confidence_loss(data, pinn_output, None)
+        physics_loss = physics_loss.view(-1, 2)
+        data.x = torch.hstack((data.x, physics_loss))
+        return data

@@ -1,3 +1,4 @@
+import copy
 import os
 from sched import scheduler
 import sys
@@ -22,6 +23,7 @@ from ray.tune.schedulers import ASHAScheduler, PopulationBasedTraining
 from ray.tune.search.hyperopt import HyperOptSearch
 
 from datasets import GridDataset, GridGraphDataset
+from models import GCN
 from training import PINNTrainer, LocalizationTrainer
 from equations import build_equations
 from utils import generate_fdia
@@ -55,7 +57,9 @@ def train_localize(config: dict=None):
         conf["model"]["n_layers"] = config.get("n_layers", conf["model"]["n_layers"])
         conf["train"]["lr"] = config["lr"]
         conf["train"]["regularization"] = config["regularization"]
-    dataset = GridGraphDataset(conf, conf["data"]["attack"])
+    pinn_model = load_pinn()
+    dataset = GridGraphDataset(conf, conf["data"]["attack"], pinn_model)
+    
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_fraction, validate_fraction])
     trainer = LocalizationTrainer(conf)
     if ray.is_initialized():
@@ -177,6 +181,14 @@ def hyperparameter_optimize():
     print(f"Best trial config: {best_trial.config}")
     print(f"Best trial checkpoint: {best_trial.path}")
 
+def load_pinn():
+    pinn_ckpt = torch.load(pinn_ckpt_path)
+    config = copy.deepcopy(conf)
+    config["model"] = pinn_ckpt["structure"]
+    pinn_model = GCN(config, 2, 2)
+    pinn_model.load_state_dict(pinn_ckpt["model"])
+    return pinn_model
+
 if __name__ == '__main__':
     if len(sys.argv) != 2:
         print("Usage: main.py config")
@@ -190,6 +202,7 @@ if __name__ == '__main__':
     mp.set_sharing_strategy("file_system")
     task = conf["task"]
     print("Task:", task)
+    pinn_ckpt_path = path.join(conf["train"]["checkpoint_dir"], conf["train"]["checkpoint"], "pinn.pt")
     train_fraction = conf["train"]["train_fraction"]
     validate_fraction = conf["train"]["validate_fraction"]
     find_error_fraction = conf["train"]["find_error_fraction"]

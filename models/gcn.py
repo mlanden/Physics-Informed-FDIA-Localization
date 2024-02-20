@@ -13,15 +13,16 @@ class GCN(nn.Module):
         n_buses = conf["data"]["n_buses"]
         self.gnns = nn.ModuleList()
         for i in range(n_layers):
-            if i < n_layers - 1:
-                concat = True
-            else:
-                concat = dense
+            # if i < n_layers - 1:
+            #     concat = True
+            # else:
+            #     concat = dense
+            concat = i < n_layers - 1
             self.gnns.append(gnn.GATConv(n_inputs if i == 0 else hidden_size * n_heads,
                                          hidden_size if i < n_layers - 1 else n_outputs,
                                          n_heads, dropout=dropout, concat=concat))
         if self.dense:
-            self.classify = nn.Linear(n_outputs * n_buses * n_heads, 2 * n_buses)
+            self.classify = nn.Linear(n_outputs * n_buses, 2 * n_buses)
 
     def forward(self, data):
         x = data.x

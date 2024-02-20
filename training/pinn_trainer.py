@@ -237,7 +237,8 @@ class PINNTrainer:
             return
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         checkpoint = torch.load(self.checkpoint_path)
-        print(checkpoint["structure"])
+        if rank == 0:
+            print(checkpoint["structure"])
         self.model.load_state_dict(checkpoint["model"])
         self.model.eval()
         if rank == 0:

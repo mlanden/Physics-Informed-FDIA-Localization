@@ -4,7 +4,7 @@ from .reactive_power_equation import ReactivePowerEquation
 from .real_power_graph_equation import RealPowerGraphEquation
 from .reactive_power_graph_equation import ReactivePowerGrapghEquation
 
-def build_equations(conf, categorical_idxs, continuous_idxs):
+def build_equations(conf, categorical_idxs=None, continuous_idxs=None):
     dataset = conf["data"]["type"]
     equations = []
     if dataset == "swat":

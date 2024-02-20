@@ -1,17 +1,19 @@
 import os
+from os import path
 import json
 import numpy as np
 import pandas as pd
 from typing import List, Tuple, Union
 import torch
 from torch_geometric.data import Data, InMemoryDataset
+from torch_geometric.loader import DataLoader
 from tqdm import tqdm
 
-from .grid_dataset import GridDataset
 from utils import to_complex
+from equations import build_equations
 
 class GridGraphDataset(InMemoryDataset):
-    def __init__(self, conf, data_path):
+    def __init__(self, conf, data_path, pinn_model=None):
         root = data_path[:data_path.index(".csv")]
         if not os.path.exists(root):
             os.makedirs(root)
@@ -21,6 +23,10 @@ class GridGraphDataset(InMemoryDataset):
         self.mva_base = conf["data"]["mva_base"]
         self.n_buses = conf["data"]["n_buses"]
         self.powerworld = conf["data"]["powerworld"]
+        self.batch_size = conf["train"]["batch_size"]
+        self.pinn_model = pinn_model
+        if self.pinn_model is not None:
+            self.equations = build_equations(conf)
 
         data = pd.read_csv(data_path).sample(frac=1)
         self.features = data.iloc[:, 2: -2].to_numpy()
@@ -29,7 +35,10 @@ class GridGraphDataset(InMemoryDataset):
         self.labels = self.labels.to_numpy()
         
         super(InMemoryDataset, self).__init__(root)
-        self.load(self.processed_paths[0])
+        if self.pinn_model is None:
+            self.load(self.processed_paths[0])
+        else:
+            self.load(self.processed_paths[1])
 
     def __len__(self):
         return len(self.features)
@@ -87,12 +96,22 @@ class GridGraphDataset(InMemoryDataset):
     
     @property
     def processed_file_names(self) -> str | List[str] | Tuple:
-        return ["data.pt"]
+        return ["data.pt", "transformed.pt"]
 
     def download(self):
         pass
 
     def process(self):
+        base_data = self.processed_paths[0]
+        if not path.exists(base_data):
+            self.base_process()
+        
+        if self.pinn_model is not None:
+            self.load(base_data)
+            grids = self.embed()
+            self.save(grids, self.processed_paths[1])
+
+    def base_process(self):
         self._per_unit()
         self.features = self.features.astype(np.float32)
 
@@ -173,6 +192,21 @@ class GridGraphDataset(InMemoryDataset):
             
         self.save(grids, self.processed_paths[0])
 
+    def embed(self):
+        loader = DataLoader(self, batch_size=self.batch_size)
+        new_grids = []
+        for data in tqdm(loader):
+            pinn_output = self.pinn_model(data)
+            physics_loss = torch.zeros((len(data), len(self.equations)), 
+                                    device=pinn_output.device)
+            for i, equation in enumerate(self.equations):
+                physics_loss[:, i] = equation.confidence_loss(data, pinn_output, None)
+            physics_loss = physics_loss.view(-1, 2)
+            data.x = torch.hstack((data.x, physics_loss))
+            new_grids.extend(data.to_data_list())
+
+        return new_grids
+    
     def get_categorical_features(self):
         return {}
     
