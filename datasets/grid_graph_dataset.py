@@ -3,10 +3,11 @@ from os import path
 import json
 import numpy as np
 import pandas as pd
-from typing import List, Tuple, Union
+from typing import List, Tuple
 import torch
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.loader import DataLoader
+from torch.profiler import profile, ProfilerActivity
 from tqdm import tqdm
 
 from utils import to_complex
@@ -18,6 +19,7 @@ class GridGraphDataset(InMemoryDataset):
         if not os.path.exists(root):
             os.makedirs(root)
         
+        self.conf = conf        
         self.types = pd.read_csv(conf["data"]["types"])
         self.standard_topology = pd.read_csv(conf["data"]["ybus"]).map(to_complex)
         self.mva_base = conf["data"]["mva_base"]
@@ -191,7 +193,8 @@ class GridGraphDataset(InMemoryDataset):
             grids.append(data)
             
         self.save(grids, self.processed_paths[0])
-
+    
+    @torch.no_grad
     def embed(self):
         loader = DataLoader(self, batch_size=self.batch_size)
         new_grids = []
