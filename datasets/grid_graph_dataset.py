@@ -20,8 +20,7 @@ class GridGraphDataset(InMemoryDataset):
             os.makedirs(root)
         
         self.conf = conf        
-        self.types = pd.read_csv(conf["data"]["types"])
-        self.standard_topology = pd.read_csv(conf["data"]["ybus"]).map(to_complex)
+        self.data_path = data_path
         self.mva_base = conf["data"]["mva_base"]
         self.n_buses = conf["data"]["n_buses"]
         self.powerworld = conf["data"]["powerworld"]
@@ -29,12 +28,6 @@ class GridGraphDataset(InMemoryDataset):
         self.pinn_model = pinn_model
         if self.pinn_model is not None:
             self.equations = build_equations(conf)
-
-        data = pd.read_csv(data_path).sample(frac=1)
-        self.features = data.iloc[:, 2: -2].to_numpy()
-        self.locations = data.iloc[:, -1].to_numpy()
-        self.labels = data.iloc[:, -2] == "yes"
-        self.labels = self.labels.to_numpy()
         
         super(InMemoryDataset, self).__init__(root)
         if self.pinn_model is None:
@@ -114,6 +107,13 @@ class GridGraphDataset(InMemoryDataset):
             self.save(grids, self.processed_paths[1])
 
     def base_process(self):
+        self.types = pd.read_csv(self.conf["data"]["types"])
+        self.standard_topology = pd.read_csv(self.conf["data"]["ybus"]).map(to_complex)
+        data = pd.read_csv(self.data_path).sample(frac=1)
+        self.features = data.iloc[:, 2: -2].to_numpy()
+        self.locations = data.iloc[:, -1].to_numpy()
+        self.labels = data.iloc[:, -2] == "yes"
+        self.labels = self.labels.to_numpy()
         self._per_unit()
         self.features = self.features.astype(np.float32)
 

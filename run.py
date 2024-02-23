@@ -57,9 +57,12 @@ def train_localize(config: dict=None):
         conf["model"]["n_layers"] = config.get("n_layers", conf["model"]["n_layers"])
         conf["train"]["lr"] = config["lr"]
         conf["train"]["regularization"] = config["regularization"]
-    pinn_model = load_pinn()
-    dataset = GridGraphDataset(conf, conf["data"]["attack"], pinn_model)
+    # pinn_model = load_pinn()
+    dataset = GridGraphDataset(conf, conf["data"]["attack"])
     
+    if fraction > 0:
+        idx = range(int(fraction * len(dataset)))
+        dataset  = Subset(dataset, idx)
     train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_fraction, validate_fraction])
     trainer = LocalizationTrainer(conf)
     if ray.is_initialized():
@@ -206,6 +209,7 @@ if __name__ == '__main__':
     train_fraction = conf["train"]["train_fraction"]
     validate_fraction = conf["train"]["validate_fraction"]
     find_error_fraction = conf["train"]["find_error_fraction"]
+    fraction = conf["train"]["fraction"]
     gpus = conf["train"]["gpus"]
     use_graph = conf["model"]["graph"]
 

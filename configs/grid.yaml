@@ -58,7 +58,8 @@ train:
   max_norm: 1
   # Cube sampling 
   # lr: 0.01
-  scale: [0.1, 1]
+  fraction: 0.2
+  scale: [1, 0.1]
   average: micro
   regularization: 0.001
   num_samples: 20

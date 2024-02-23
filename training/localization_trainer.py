@@ -29,12 +29,14 @@ class LocalizationTrainer:
         self.model_name = "localize.pt"
         self.localize_model_path = path.join(self.checkpoint_dir, self.model_name)
         self.size = self.conf["train"]["gpus"]
-        self.localize_model = GCN(self.conf, 4, self.conf["model"]["hidden_size"], dense=True)
+        self.scale = conf["train"]["scale"]
+        self.equations = build_equations(conf)
+        self.localize_model = GCN(self.conf, 2, 2)
 
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
             os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '29500'
+            os.environ['MASTER_PORT'] = '29501'
             if self.conf["train"]["cuda"]:
                 backend = "nccl"
             else:
@@ -75,7 +77,6 @@ class LocalizationTrainer:
                                  lr=self.conf["train"]["lr"],
                                  weight_decay=self.conf["train"]["regularization"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, factor=0.5)
-        loss_fn = torch.nn.BCEWithLogitsLoss()
         
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         self.localize_model = self.localize_model.to(device)
@@ -118,26 +119,39 @@ class LocalizationTrainer:
             else:
                 loader = train_loader
             total_loss = 0
+            total_physics_loss = 0
+            total_localization_loss = 0
             for data in loader:
                 optim.zero_grad()
                 data = data.to(device)
-
-                logits = self.localize_model(data)
-                loss = loss_fn(logits, data.classes)
+                loss, localization_loss, physics_loss = self.compute_loss(data)
+            
                 loss.backward()
                 if self.conf["train"]["max_norm"] > 0:
                     torch.nn.utils.clip_grad.clip_grad_norm_(self.localize_model.parameters(), self.conf["train"]["max_norm"])
                 optim.step()
                 total_loss += loss.detach()
+                total_physics_loss += physics_loss.detach()
+                total_localization_loss += localization_loss.detach()
 
                 if rank == 0 and not ray.is_initialized():
                     loader.set_description(f"Train Epoch [{epoch: 3d}/{epochs}]")
-                    loader.set_postfix(loss=loss.item())
+                    loader.set_postfix(loss=loss.item(), physics_loss=physics_loss.item(), 
+                                       localization_loss=localization_loss.item())
             total_loss /= len(train_loader)
+            total_physics_loss /= len(train_loader)
+            total_localization_loss /= len(train_loader)
             dist.all_reduce(total_loss)
+            dist.all_reduce(total_physics_loss)
+            dist.all_reduce(total_localization_loss)
+
             total_loss /= self.size
+            total_localization_loss /= self.size
+            total_physics_loss /= self.size
             if rank == 0 and not ray.is_initialized():
                 tb_writer.add_scalar("Training loss", total_loss, epoch)
+                tb_writer.add_scalar("Physics loss", total_physics_loss, epoch)
+                tb_writer.add_scalar("Localization loss", total_localization_loss, epoch)
 
             val_loader.sampler.set_epoch(epoch)
             if rank == 0 and not ray.is_initialized():
@@ -150,8 +164,7 @@ class LocalizationTrainer:
                 total_loss = 0
                 for data in loader:
                     data = data.to(device)
-                    logits = self.localize_model(data)
-                    loss = loss_fn(logits + 1e-10, data.classes)
+                    loss, localization_loss, physics_loss = self.compute_loss(data)
                     total_loss += loss
     
                     if rank == 0 and not ray.is_initialized():
@@ -200,17 +213,10 @@ class LocalizationTrainer:
             return
 
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
-        pinn_ckpt = torch.load(self.pinn_model_path)
-        conf = copy.deepcopy(self.conf)
-        conf["model"] = pinn_ckpt["structure"]
-        self.pinn_model = GCN(conf, 2, 2)
-        self.pinn_model.load_state_dict(pinn_ckpt["model"])
-        self.pinn_model.eval()
+        
         localize_chpt = torch.load(self.localize_model_path)
         self.localize_model.load_state_dict(localize_chpt["model"])
-        self.pinn_model = self.pinn_model.to(device)
         self.localize_model = self.localize_model.to(device)
-        self.pinn_model.eval()
         self.localize_model.eval()
 
         loader = self._init_ddp(rank, [dataset], [False])[0]
@@ -224,10 +230,7 @@ class LocalizationTrainer:
         with torch.no_grad():
             for data in data_loader:
                 data = data.to(device)
-                data = self.embed(data)
-                # embedding = self.pinn_model(data)
-                # data.x = torch.hstack((data.x, embedding))
-                logits = self.localize_model(data)
+                _, logits = self.localize_model(data)
                 threshold = torch.sigmoid(logits + 1e-10)
                 prediction = threshold > 0.5
                 thresholds.append(threshold)
@@ -284,13 +287,15 @@ class LocalizationTrainer:
                 dist.gather(truth, [], 0)
                 dist.gather(thresholds, [], 0)
 
-    @torch.no_grad
-    def embed(self, data):
-        pinn_output = self.pinn_model(data)
+    def compute_loss(self, data):
+        pinn_output, localization_output = self.localize_model(data)
+        localization_loss = F.binary_cross_entropy_with_logits(localization_output, data.classes)
+
         physics_loss = torch.zeros((len(data), len(self.equations)), 
                                    device=pinn_output.device)
         for i, equation in enumerate(self.equations):
             physics_loss[:, i] = equation.confidence_loss(data, pinn_output, None)
-        physics_loss = physics_loss.view(-1, 2)
-        data.x = torch.hstack((data.x, physics_loss))
-        return data
+        physics_loss = physics_loss.mean()
+        localization_loss = localization_loss.mean()
+        loss = self.scale[0] * localization_loss + self.scale[1] * physics_loss
+        return loss, localization_loss, physics_loss
