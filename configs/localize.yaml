@@ -1,6 +1,6 @@
 task: train_pinn
-# task: train_localize
-# task: localize
+task: train_localize
+task: localize
 # task: error
 # task: test
 # task: "hyperparameter_optimize"
@@ -35,9 +35,9 @@ attack:
   # network_parameter_error: 0
   # state_variable_error: 0
 model:
-  hidden_size: 20
+  hidden_size: 32
   layer_sizes: [40, 20, 10]
-  n_layers: 6
+  n_layers: 2
   sequence_length: 10
   activation: relu
   profile_type: mean
@@ -45,7 +45,7 @@ model:
   dropout: 0.339
   threshold: 6.78
   graph: 1
-  n_heads: 8
+  n_heads: 5
 
 train:
   cuda: 1
@@ -54,13 +54,15 @@ train:
   batch_size: 64
   epochs: 100
   lr: 0.00228
+  fraction: 0.2
   # Cube sampling 
   # lr: 0.01
   scale: [0.1, 1]
   average: micro
   regularization: 0.00005559
+  max_norm: 0.7
   num_samples: 20
-  checkpoint: grid_14_normal_topology
+  checkpoint: duel
   # checkpoint: test
   checkpoint_dir: checkpoint
   load_checkpoint: 0

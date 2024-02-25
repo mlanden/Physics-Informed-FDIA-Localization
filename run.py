@@ -55,6 +55,8 @@ def train_localize(config: dict=None):
         conf["model"]["n_heads"] = config.get("n_heads", conf["model"]["n_heads"])
         conf["model"]["hidden_size"] = config.get("size", conf["model"]["hidden_size"])
         conf["model"]["n_layers"] = config.get("n_layers", conf["model"]["n_layers"])
+        conf["model"]["n_iters"] = config.get("n_iters", conf["model"]["n_iters"])
+        conf["model"]["n_stacks"] = config.get("n_stacks", conf["model"]["n_stacks"])
         conf["train"]["lr"] = config["lr"]
         conf["train"]["regularization"] = config["regularization"]
     # pinn_model = load_pinn()
@@ -125,9 +127,11 @@ def hyperparameter_optimize():
 
     if not population_training:
         config.update({
-            "n_heads": tune.choice([i for i in range(2, 9)]),
+            "n_stacks": tune.choice([2, 3, 4]),
+            # "n_heads": tune.choice([i for i in range(2, 9)]),
             "size": tune.choice([2 ** i for i in range(4, 8)]),
-            "n_layers": tune.choice([i for i in range(2, 8)])
+            "n_layers": tune.choice([i for i in range(2, 8)]),
+            "n_iters": tune.choice([2, 3, 4, 5])
         })
     if not population_training:
         scheduler = ASHAScheduler(

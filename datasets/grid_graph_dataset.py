@@ -34,9 +34,6 @@ class GridGraphDataset(InMemoryDataset):
             self.load(self.processed_paths[0])
         else:
             self.load(self.processed_paths[1])
-
-    def __len__(self):
-        return len(self.features)
     
     def _per_unit(self):
         for bus in range(self.n_buses):

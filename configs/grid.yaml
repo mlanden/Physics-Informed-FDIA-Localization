@@ -3,7 +3,7 @@ task: train_localize
 # task: localize  
 # task: error
 # task: test
-# task: "hyperparameter_optimize"
+task: "hyperparameter_optimize"
 # task: equations
 # task: equ_error
 # task: attack_generation
@@ -47,6 +47,8 @@ model:
   threshold: 6.78
   graph: 1
   n_heads: 6
+  n_stacks: 5
+  n_iters: 4
 
 train:
   cuda: 1

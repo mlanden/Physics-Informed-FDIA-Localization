@@ -36,7 +36,7 @@ class LocalizationTrainer:
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
             os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '29501'
+            os.environ['MASTER_PORT'] = '29500'
             if self.conf["train"]["cuda"]:
                 backend = "nccl"
             else:
@@ -68,10 +68,6 @@ class LocalizationTrainer:
     def train(self, rank, train_dataset, val_dataset):
         start_epoch = 0
         best_loss = torch.inf
-        if not path.exists(self.pinn_model_path):
-            if rank == 0:
-                print("PINN model does not exist")
-            return
 
         optim = torch.optim.Adam(self.localize_model.parameters(), 
                                  lr=self.conf["train"]["lr"],
