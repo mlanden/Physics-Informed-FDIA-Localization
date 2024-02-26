@@ -1,4 +1,3 @@
-task: train_pinn
 task: train_localize
 task: localize
 # task: error
@@ -16,7 +15,7 @@ data:
   # normal: ../data/grid/14_2_lines_out.csv
   # normal: ../data/grid/14_attack_base.csv
   attack: ../data/grid/14_perfect_fdia_train.csv
-  test: ../data/grid/14_imperfect_fdia.csv
+  test: ../data/grid/14_perfect_fdia.csv
   # attack: ../data/grid/14_attacks_2.csv
   # attack: ../data/grid/14_normal.csv
   # attack: ../data/grid/14_continuous_admittance.csv
@@ -42,10 +41,12 @@ model:
   activation: relu
   profile_type: mean
 #  profile_type: gmm
-  dropout: 0.339
+  dropout: 0.767
   threshold: 6.78
   graph: 1
   n_heads: 5
+  n_stacks: 2
+  n_iters: 2
 
 train:
   cuda: 1
@@ -53,19 +54,19 @@ train:
   nodes: 1
   batch_size: 64
   epochs: 100
-  lr: 0.00228
-  fraction: 0.2
+  lr: 0.001
+  fraction: 0.5
   # Cube sampling 
   # lr: 0.01
   scale: [0.1, 1]
   average: micro
-  regularization: 0.00005559
+  regularization: 0.000074845134550496
   max_norm: 0.7
   num_samples: 20
   checkpoint: duel
   # checkpoint: test
   checkpoint_dir: checkpoint
-  load_checkpoint: 0
+  load_checkpoint: 1
   tuned: localization
   train_fraction: 0.7
   validate_fraction: 0.3

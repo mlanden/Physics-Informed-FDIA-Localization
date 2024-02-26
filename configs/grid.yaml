@@ -17,7 +17,7 @@ data:
   # normal: ../data/grid/14_attack_base.csv
   normal: ../data/grid/14_perfect_fdia_train.csv
   attack: ../data/grid/14_perfect_fdia_train.csv
-  test: ../data/grid/14_imperfect_fdia.csv
+  test: ../data/grid/14_perfect_fdia.csv
   # attack: ../data/grid/14_attacks_2.csv
   # attack: ../data/grid/14_normal.csv
   # attack: ../data/grid/14_continuous_admittance.csv

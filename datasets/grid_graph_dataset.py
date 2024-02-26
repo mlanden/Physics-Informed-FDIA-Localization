@@ -104,7 +104,6 @@ class GridGraphDataset(InMemoryDataset):
             self.save(grids, self.processed_paths[1])
 
     def base_process(self):
-        self.types = pd.read_csv(self.conf["data"]["types"])
         self.standard_topology = pd.read_csv(self.conf["data"]["ybus"]).map(to_complex)
         data = pd.read_csv(self.data_path).sample(frac=1)
         self.features = data.iloc[:, 2: -2].to_numpy()
@@ -118,40 +117,11 @@ class GridGraphDataset(InMemoryDataset):
         self.output_mask = []
         for bus in range(self.n_buses):
             bus_base_idx = 4 * bus
-            bus_type = self.types.iloc[bus, 0]
-            if bus_type == 1:
-                # PQ
-                # reactive
-                self.input_mask.append(bus_base_idx)
-                # real
-                self.input_mask.append(bus_base_idx + 1)
-                # voltage angle
-                self.output_mask.append(bus_base_idx + 2)
-                # voltage mag
-                self.output_mask.append(bus_base_idx + 3)
-            elif bus_type == 2:
-                # PV 
-                # real
-                self.input_mask.append(bus_base_idx + 1)
-                # voltage mag
-                self.input_mask.append(bus_base_idx + 3)
-                # reactive 
-                self.output_mask.append(bus_base_idx)
-                # voltage angle
-                self.output_mask.append(bus_base_idx + 2)
-            elif bus_type == 3:
-                # Slack bus
-                # voltage angle 
-                self.input_mask.append(bus_base_idx + 2)
-                # voltage mag
-                self.input_mask.append(bus_base_idx + 3)
-                # reactive
-                self.output_mask.append(bus_base_idx)
-                # real
-                self.output_mask.append(bus_base_idx + 1)
-
-            else:
-                raise RuntimeError("Unknown bus type")
+            self.input_mask.append(bus_base_idx)
+            self.input_mask.append(bus_base_idx + 1)
+            self.output_mask.append(bus_base_idx + 2)
+            self.output_mask.append(bus_base_idx + 3)
+            
         self.input_mask.extend(list(range(4 * self.n_buses, len(self.features[0]))))
 
         grids = []

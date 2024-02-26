@@ -36,7 +36,7 @@ class LocalizationTrainer:
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
             os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '29500'
+            os.environ['MASTER_PORT'] = '29509'
             if self.conf["train"]["cuda"]:
                 backend = "nccl"
             else:
