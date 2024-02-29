@@ -27,12 +27,13 @@ class GCN(nn.Module):
             
         self.localize_conv = nn.ModuleList()
         for i in range(n_layers):
-            self.localize_conv.append(gnn.ARMAConv(hidden_size, hidden_size,
+            self.localize_conv.append(gnn.ARMAConv(hidden_size + n_inputs if i == 0 else hidden_size, hidden_size,
                                                    n_stacks, n_iters, dropout=dropout))
         self.classify = nn.Linear(hidden_size * self.n_buses, 2 * self.n_buses)
 
     def forward(self, data):
         x = data.x
+        inputs = x
         edge_index = data.edge_index
         edge_attr = data.edge_attr
         edge_weights = torch.abs(data.edge_attr[:, 0])
@@ -47,7 +48,7 @@ class GCN(nn.Module):
             if i < len(self.pinn_conv) - 1:
                 pinn_output = pinn_output.relu()
 
-        localization_outut = x
+        localization_outut = torch.hstack((x, inputs))
         for i, layer in enumerate(self.localize_conv):
             localization_outut = layer(localization_outut, edge_index, edge_weights)
             localization_outut = localization_outut.relu()

@@ -232,8 +232,8 @@ if __name__ == '__main__':
     elif task == "equ_error":
         losses = []
         if use_graph:
-            dataset = GridGraphDataset(conf, conf["data"]["normal"], True)
-            equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
+            dataset = GridGraphDataset(conf, conf["data"]["normal"])
+            equations = build_equations(conf)
             loader = DataLoader(dataset, batch_size=conf["train"]["batch_size"])
             for batch in loader:
                 for equ in equations:

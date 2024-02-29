@@ -129,7 +129,7 @@ class GridGraphDataset(InMemoryDataset):
             nodes = self.features[graph, self.input_mask][:2 * self.n_buses].reshape(self.n_buses, 2)
             location = self.locations[graph]
             classes = torch.zeros(2 * self.n_buses)
-            if location != "-1":
+            if str(location) != "-1":
                 location = json.loads(location)
                 classes.scatter_(0, torch.tensor(location), 1)
 

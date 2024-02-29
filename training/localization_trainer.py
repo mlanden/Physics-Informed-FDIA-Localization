@@ -36,7 +36,7 @@ class LocalizationTrainer:
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
             os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '29509'
+            os.environ['MASTER_PORT'] = '29507'
             if self.conf["train"]["cuda"]:
                 backend = "nccl"
             else:
@@ -287,7 +287,7 @@ class LocalizationTrainer:
         pinn_output, localization_output = self.localize_model(data)
         localization_loss = F.binary_cross_entropy_with_logits(localization_output, data.classes)
 
-        physics_loss = torch.zeros((len(data), len(self.equations)), 
+        physics_loss = torch.zeros((len(data.x), len(self.equations)), 
                                    device=pinn_output.device)
         for i, equation in enumerate(self.equations):
             physics_loss[:, i] = equation.confidence_loss(data, pinn_output, None)

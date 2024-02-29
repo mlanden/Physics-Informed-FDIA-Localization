@@ -1,8 +1,8 @@
-task: train_localize
+/task: train_localize
 task: localize
 # task: error
 # task: test
-# task: "hyperparameter_optimize"
+task: "hyperparameter_optimize"
 # task: equations
 # task: equ_error
 # task: attack_generation
@@ -55,18 +55,19 @@ train:
   batch_size: 64
   epochs: 100
   lr: 0.001
-  fraction: 0.5
+  fraction: 0.2
   # Cube sampling 
   # lr: 0.01
-  scale: [0.1, 1]
+  scale: [1, 0.01]
   average: micro
   regularization: 0.000074845134550496
   max_norm: 0.7
   num_samples: 20
   checkpoint: duel
   # checkpoint: test
+  tune_checkpoint: TorchTrainer
   checkpoint_dir: checkpoint
-  load_checkpoint: 1
+  load_checkpoint: 0
   tuned: localization
   train_fraction: 0.7
   validate_fraction: 0.3
