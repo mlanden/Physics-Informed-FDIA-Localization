@@ -17,6 +17,7 @@ import matplotlib.pyplot as plt
 
 from models import GCN
 from equations import build_equations
+from utils import EarlyStopping, early_stopping
 
 
 class LocalizationTrainer:
@@ -36,7 +37,7 @@ class LocalizationTrainer:
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
             os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '29507'
+            os.environ['MASTER_PORT'] = '29500'
             if self.conf["train"]["cuda"]:
                 backend = "nccl"
             else:
@@ -106,6 +107,7 @@ class LocalizationTrainer:
             print("Version:", version)
             tb_writer = SummaryWriter(path.join(tb_dir, f"version_{version}"))
 
+        early_stopping = EarlyStopping(10, 0.001)
         torch.autograd.set_detect_anomaly(True)
         for epoch in range(start_epoch, epochs):
             self.localize_model.train()
@@ -199,6 +201,9 @@ class LocalizationTrainer:
                                 print(f"Epoch {epoch}: Loss: {total_loss.item()}")
                         else:
                             torch.save(checkpoint, self.localize_model_path)
+                    print(total_loss.item())
+                if early_stopping.stop_training(total_loss.item()):
+                    break
             dist.barrier()
 
 
