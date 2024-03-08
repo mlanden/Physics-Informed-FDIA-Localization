@@ -1,7 +1,7 @@
 task: train_pinn
 task: train_localize
 task: localize
-task: error
+# task: error
 # task: test
 # task: "hyperparameter_optimize"
 # task: equations
@@ -38,7 +38,7 @@ attack:
 model:
   hidden_size: 64
   layer_sizes: [40, 20, 10]
-  n_layers: 7
+  n_layers: 3
   sequence_length: 10
   activation: relu
   profile_type: mean
@@ -46,7 +46,8 @@ model:
   dropout: 0.56
   threshold: 6.78
   graph: 1
-  n_heads: 3
+  n_stacks: 4
+
 
 train:
   cuda: 1
@@ -63,17 +64,18 @@ train:
   regularization: 0.001
   num_samples: 20
   checkpoint: grid_14_normal_topology
-  # checkpoint: test
+  checkpoint: test
   checkpoint_dir: checkpoint/
   tune_checkpoint: checkpoint/TorchTrainer_2024-02-10_11-13-26
   load_checkpoint: 1
   tuned: local
+  fraction: 0.01
   train_fraction: 0.8
   validate_fraction: 0.2
   find_error_fraction: 0.25
-  train_fraction: 0
-  validate_fraction: 0
-  find_error_fraction: 1
+  # train_fraction: 0
+  # validate_fraction: 0
+  # find_error_fraction: 1
   equation_name: grid
   physics: 1
   population_train: 0  

@@ -1,4 +1,4 @@
-import copy
+import json
 import  os
 import tempfile
 from os import path
@@ -201,7 +201,7 @@ class LocalizationTrainer:
                                 print(f"Epoch {epoch}: Loss: {total_loss.item()}")
                         else:
                             torch.save(checkpoint, self.localize_model_path)
-                    print(total_loss.item())
+  
                 if early_stopping.stop_training(total_loss.item()):
                     break
             dist.barrier()
@@ -224,6 +224,7 @@ class LocalizationTrainer:
         predicted = []
         truth = []
         thresholds = []
+        ids = []
         if rank == 0:
             data_loader = tqdm(loader)
         else:
@@ -237,13 +238,14 @@ class LocalizationTrainer:
                 thresholds.append(threshold)
                 predicted.append(prediction.float())
                 truth.append(data.classes)
+                ids.append(data.idx.float())
             thresholds = torch.cat(thresholds)
             predicted = torch.cat(predicted)
             truth = torch.cat(truth)
+            ids = torch.cat(ids)
 
             if rank == 0:
                 if self.size > 1:
-                    print("Gathering")
                     all_predicted = [torch.empty(predicted.size(), device=device)
                                     for _ in range(self.size)]
                     dist.gather(predicted, all_predicted, 0)
@@ -256,6 +258,10 @@ class LocalizationTrainer:
                                   for _ in range(self.size)]
                     dist.gather(thresholds, all_thresholds, 0)
                     thresholds = torch.cat(all_thresholds).cpu()
+                    all_ids = [torch.empty(ids.size(), device=device)
+                               for _ in range(self.size)]
+                    dist.gather(ids, all_ids, 0)
+                    ids = torch.cat(all_ids).cpu()
                 else:
                     truth = truth.cpu()
                     predicted = predicted.cpu()
@@ -267,6 +273,12 @@ class LocalizationTrainer:
                 plt.plot(fpr, tpr)
                 plt.grid(True)
                 plt.savefig("roc.png")
+
+                missed = torch.nonzero((truth == 1) & (predicted == 0))
+                print(truth[missed[0, 0], missed[0, 1]], predicted[missed[0, 0], missed[0, 1]])
+                missed_grids = ids[missed[:, 0]].numpy().tolist()
+                with open("missed_grids_pinn.json", "w") as fd:
+                    json.dump(missed_grids, fd)
 
                 recall = recall_score(truth, predicted, average=self.conf["train"]["average"])
                 precision = precision_score(truth, predicted, average=self.conf["train"]["average"])
@@ -287,6 +299,7 @@ class LocalizationTrainer:
                 dist.gather(predicted, [], 0)
                 dist.gather(truth, [], 0)
                 dist.gather(thresholds, [], 0)
+                dist.gather(ids, [], 0)
 
     def compute_loss(self, data):
         pinn_output, localization_output = self.localize_model(data)

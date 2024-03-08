@@ -7,7 +7,6 @@ from typing import List, Tuple
 import torch
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.loader import DataLoader
-from torch.profiler import profile, ProfilerActivity
 from tqdm import tqdm
 
 from utils import to_complex
@@ -150,12 +149,13 @@ class GridGraphDataset(InMemoryDataset):
                     i += 1
             edge_index = torch.tensor([sources, targets], dtype=torch.long)
             targets = self.features[graph, self.output_mask].reshape(self.n_buses, 2)
-
+            
             data = Data(x=torch.tensor(nodes, dtype=torch.float),
                         edge_index=edge_index,
                         edge_attr=torch.tensor(np.array(edge_features), dtype=torch.float),
                         y=torch.tensor(targets),
-                        classes=classes.view(1, -1)
+                        classes=classes.view(1, -1),
+                        idx=torch.tensor(graph)
                         )
             grids.append(data)
             

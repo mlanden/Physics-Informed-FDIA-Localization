@@ -57,7 +57,7 @@ def train_localize(config: dict=None):
         conf["model"]["n_layers"] = config.get("n_layers", conf["model"]["n_layers"])
         conf["model"]["n_iters"] = config.get("n_iters", conf["model"]["n_iters"])
         conf["model"]["n_stacks"] = config.get("n_stacks", conf["model"]["n_stacks"])
-        conf["train"]["lr"] = config["lr"]
+        conf["train"]["lr"] = config.get("lr", conf["train"]["lr"])
         conf["train"]["regularization"] = config["regularization"]
     # pinn_model = load_pinn()
     dataset = GridGraphDataset(conf, conf["data"]["attack"])
@@ -117,7 +117,7 @@ def hyperparameter_optimize():
     conf["train"]["tune_checkpoint"] = path.abspath(conf["train"]["tune_checkpoint"])
     population_training = conf["train"].get("population_train", 1)
     config = {
-        "lr": tune.loguniform(1e-4, 1e-1),
+        # "lr": tune.loguniform(1e-4, 1e-1),
         "dropout": tune.uniform(0.1, 0.8),
         "regularization": tune.loguniform(1e-5, 1e-1)
     }
@@ -131,7 +131,7 @@ def hyperparameter_optimize():
             # "n_heads": tune.choice([i for i in range(2, 9)]),
             "size": tune.choice([2 ** i for i in range(4, 8)]),
             "n_layers": tune.choice([i for i in range(2, 8)]),
-            "n_iters": tune.choice([2, 3, 4, 5])
+            # "n_iters": tune.choice([2, 3, 4, 5])
         })
     if not population_training:
         scheduler = ASHAScheduler(
