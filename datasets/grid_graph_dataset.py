@@ -13,7 +13,7 @@ from utils import to_complex
 from equations import build_equations
 
 class GridGraphDataset(InMemoryDataset):
-    def __init__(self, conf, data_path, pinn_model=None):
+    def __init__(self, conf, data_path, sample=True, pinn_model=None):
         root = data_path[:data_path.index(".csv")]
         if not os.path.exists(root):
             os.makedirs(root)
@@ -24,6 +24,7 @@ class GridGraphDataset(InMemoryDataset):
         self.n_buses = conf["data"]["n_buses"]
         self.powerworld = conf["data"]["powerworld"]
         self.batch_size = conf["train"]["batch_size"]
+        self.sample = sample
         self.pinn_model = pinn_model
         if self.pinn_model is not None:
             self.equations = build_equations(conf)
@@ -104,7 +105,9 @@ class GridGraphDataset(InMemoryDataset):
 
     def base_process(self):
         self.standard_topology = pd.read_csv(self.conf["data"]["ybus"]).map(to_complex)
-        data = pd.read_csv(self.data_path).sample(frac=1)
+        data = pd.read_csv(self.data_path)
+        if self.sample:
+            data = data.sample(frac=1)
         self.features = data.iloc[:, 2: -2].to_numpy()
         self.locations = data.iloc[:, -1].to_numpy()
         self.labels = data.iloc[:, -2] == "yes"

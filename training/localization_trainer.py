@@ -37,7 +37,7 @@ class LocalizationTrainer:
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
             os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '29500'
+            os.environ['MASTER_PORT'] = '29508'
             if self.conf["train"]["cuda"]:
                 backend = "nccl"
             else:
@@ -107,7 +107,7 @@ class LocalizationTrainer:
             print("Version:", version)
             tb_writer = SummaryWriter(path.join(tb_dir, f"version_{version}"))
 
-        early_stopping = EarlyStopping(10, 0.001)
+        early_stopping = EarlyStopping(20, 0.0001)
         torch.autograd.set_detect_anomaly(True)
         for epoch in range(start_epoch, epochs):
             self.localize_model.train()
@@ -275,10 +275,9 @@ class LocalizationTrainer:
                 plt.savefig("roc.png")
 
                 missed = torch.nonzero((truth == 1) & (predicted == 0))
-                print(truth[missed[0, 0], missed[0, 1]], predicted[missed[0, 0], missed[0, 1]])
                 missed_grids = ids[missed[:, 0]].numpy().tolist()
-                with open("missed_grids_pinn.json", "w") as fd:
-                    json.dump(missed_grids, fd)
+                # with open("missed_grids_pinn.json", "w") as fd:
+                #     json.dump(missed_grids, fd)
 
                 recall = recall_score(truth, predicted, average=self.conf["train"]["average"])
                 precision = precision_score(truth, predicted, average=self.conf["train"]["average"])

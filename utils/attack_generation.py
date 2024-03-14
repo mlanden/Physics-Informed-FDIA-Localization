@@ -1,8 +1,9 @@
+import random
 import pandas as pd
 import numpy as np
 from tqdm import tqdm
 from utils import to_complex
-
+import matplotlib.pyplot as plt
 
 def generate_fdia(conf):
     attack_base = conf["data"]["attack_base"]
@@ -14,7 +15,7 @@ def generate_fdia(conf):
     base_states = base_states_pd.to_numpy()
     mva_base = conf["data"]["mva_base"]
 
-
+    attacked_busses = []
     new_states = []
     for i in tqdm(range(len(base_states))):
         # Add the non attack state
@@ -62,17 +63,30 @@ def generate_fdia(conf):
 
         # Compute c to add to state and add it
         false_attack_state = np.copy(attack_state)
-        # TODO: add false data
-        attacked_bus = np.random.randint(n_buses)
+        nonzero_angles = set()
+        nonzero_mags = set()
+        for i in range(n_buses):
+            if attack_state[6 * i + 4] != 0:
+                nonzero_angles.add(i)
+            if attack_state[6 * i + 5] != 0:
+                nonzero_mags.add(i)
+        
+        available_buses = nonzero_mags.intersection(nonzero_angles)
+    
+        attacked_bus = random.sample(list(available_buses), 1)[0]
+        attacked_busses.append(attacked_bus)
         bus_base_idx = 6 * attacked_bus
         true_angle = attack_state[bus_base_idx + 4]
+        amount = random.uniform(0, 0.5) if random.random() < 0.5 else 1 - random.uniform(0, 0.5)
         attacked_angle = true_angle * ((1 - attack_bias) + 2 * attack_bias 
-                                       * np.random.random())
+                                        * amount)
+        assert true_angle != attacked_angle
         false_attack_state[bus_base_idx + 4] = attacked_angle
 
         true_magnitude = attack_state[bus_base_idx + 5]
         attacked_magnitude = true_magnitude * ((1 - attack_bias) + 2 * attack_bias
-                                               * np.random.random())
+                                               * amount)
+        assert true_magnitude != attacked_magnitude
         false_attack_state[bus_base_idx + 5] = attacked_magnitude
 
         # compute h(x\hat) and h(x\hhat + c)
@@ -186,6 +200,11 @@ def generate_fdia(conf):
 
     attacks = pd.DataFrame(new_states, columns=base_states_pd.columns)
     attacks.to_csv(conf["data"]["attack"], index=False)
+
+    ax = plt.subplot()
+    ax.hist(attacked_busses)
+    plt.tight_layout()
+    plt.savefig("Attacked_busses.png")
 
 def test(state, n_buses):
     state = np.copy(state)

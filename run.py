@@ -59,6 +59,7 @@ def train_localize(config: dict=None):
         conf["model"]["n_stacks"] = config.get("n_stacks", conf["model"]["n_stacks"])
         conf["train"]["lr"] = config.get("lr", conf["train"]["lr"])
         conf["train"]["regularization"] = config["regularization"]
+        conf["model"]["noralization"] = config.get("normalization", conf["model"]["noralization"])
     # pinn_model = load_pinn()
     dataset = GridGraphDataset(conf, conf["data"]["attack"])
     
@@ -76,7 +77,7 @@ def train_localize(config: dict=None):
 
 
 def localize():
-    dataset = GridGraphDataset(conf, conf["data"]["test"])
+    dataset = GridGraphDataset(conf, conf["data"]["test"], False)
     trainer = LocalizationTrainer(conf)
     mp.spawn(trainer.localize, args=(dataset,),
              nprocs=gpus,
@@ -131,7 +132,8 @@ def hyperparameter_optimize():
             # "n_heads": tune.choice([i for i in range(2, 9)]),
             "size": tune.choice([2 ** i for i in range(4, 8)]),
             "n_layers": tune.choice([i for i in range(2, 8)]),
-            # "n_iters": tune.choice([2, 3, 4, 5])
+            # "n_iters": tune.choice([2, 3, 4, 5]),
+            "normalization": tune.choice([None, "sym", "rw"])
         })
     if not population_training:
         scheduler = ASHAScheduler(
@@ -163,7 +165,8 @@ def hyperparameter_optimize():
     if conf["train"]["load_checkpoint"]:
         tuner = tune.Tuner.restore(
             conf["train"]["tune_checkpoint"],
-            trainer
+            trainer,
+            restart_errored=True
         )
     else:
         tuner = tune.Tuner(

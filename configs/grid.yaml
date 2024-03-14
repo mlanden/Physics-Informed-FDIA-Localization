@@ -1,6 +1,5 @@
-task: train_pinn
 task: train_localize
-# task: localize  
+task: localize
 # task: error
 # task: test
 # task: "hyperparameter_optimize"
@@ -23,6 +22,7 @@ data:
   # attack: ../data/grid/14_continuous_admittance.csv
   # attack: ../data/grid/14_line_1_out.csv
   attack_base: ../data/grid/14_continuous_admittance.csv
+  # attack_base: ../data/grid/14_lines_out.csv
   types: ../data/grid/14_types.csv
   ybus: ../data/grid/14_ybus.csv
   n_buses: 14
@@ -33,12 +33,12 @@ attack:
   bias: 0.2
   network_parameter_error: 0.1
   state_variable_error: 0.07
-  # network_parameter_error: 0
-  # state_variable_error: 0
+  network_parameter_error: 0
+  state_variable_error: 0
 model:
-  hidden_size: 32
+  hidden_size: 128
   layer_sizes: [40, 20, 10]
-  n_layers: 3
+  n_layers: 6
   sequence_length: 10
   activation: relu
   profile_type: mean
@@ -47,8 +47,9 @@ model:
   threshold: 6.78
   graph: 1
   n_heads: 6
-  n_stacks: 5
-  n_iters: 4
+  n_stacks: 3
+  n_iters: 3
+  noralization: sym
 
 train:
   cuda: 1
@@ -65,8 +66,8 @@ train:
   average: micro
   regularization: 0.001
   num_samples: 20
-  checkpoint: Single_loss
-  # checkpoint: test
+  checkpoint: edge_weights
+  checkpoint: test
   checkpoint_dir: checkpoint/
   tune_checkpoint: checkpoint/TorchTrainer_2024-02-10_11-13-26
   load_checkpoint: 0
