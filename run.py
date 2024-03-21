@@ -57,6 +57,7 @@ def train_localize(config: dict=None):
         conf["model"]["n_layers"] = config.get("n_layers", conf["model"]["n_layers"])
         conf["model"]["n_iters"] = config.get("n_iters", conf["model"]["n_iters"])
         conf["model"]["n_stacks"] = config.get("n_stacks", conf["model"]["n_stacks"])
+        conf["model"]["k"] = config.get("k", conf["model"]["k"])
         conf["train"]["lr"] = config.get("lr", conf["train"]["lr"])
         conf["train"]["regularization"] = config["regularization"]
         conf["model"]["noralization"] = config.get("normalization", conf["model"]["noralization"])
@@ -120,8 +121,9 @@ def hyperparameter_optimize():
     config = {
         # "lr": tune.loguniform(1e-4, 1e-1),
         "dropout": tune.uniform(0.1, 0.8),
-        "regularization": tune.loguniform(1e-5, 1e-1)
+        "regularization": tune.loguniform(1e-7, 1e-3)
     }
+    os.environ["CUDA_VISIBLE_DEVICES"] = "0,1,2"
     ray.init(_temp_dir=path.abspath("../ray"))
 
     algo = HyperOptSearch(metric="loss", mode="min")
@@ -129,11 +131,12 @@ def hyperparameter_optimize():
     if not population_training:
         config.update({
             "n_stacks": tune.choice([2, 3, 4]),
+            "k": tune.choice([2, 3, 4]),
             # "n_heads": tune.choice([i for i in range(2, 9)]),
             "size": tune.choice([2 ** i for i in range(4, 8)]),
             "n_layers": tune.choice([i for i in range(2, 8)]),
-            # "n_iters": tune.choice([2, 3, 4, 5]),
-            "normalization": tune.choice([None, "sym", "rw"])
+            "n_iters": tune.choice([2, 3, 4, 5]),
+            "normalization": tune.choice(["sym", "rw"])
         })
     if not population_training:
         scheduler = ASHAScheduler(
@@ -177,7 +180,8 @@ def hyperparameter_optimize():
         tune_config=TuneConfig(
             num_samples=conf["train"]["num_samples"],
             scheduler=scheduler,
-            search_alg=algo
+            search_alg=algo,
+            max_concurrent_trials=3
         ),
         run_config=RunConfig(storage_path=path.abspath("./checkpoint"),
                              checkpoint_config=CheckpointConfig(num_to_keep=4, 

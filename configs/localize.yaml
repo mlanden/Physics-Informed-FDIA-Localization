@@ -35,7 +35,10 @@ attack:
   # state_variable_error: 0
 model:
   hidden_size: 32
-  layer_sizes: [40, 20, 10]
+  n_stacks: 2
+  n_iters: 2
+  noralization: sym
+  k: 5
   n_layers: 2
   sequence_length: 10
   activation: relu
@@ -45,9 +48,7 @@ model:
   threshold: 6.78
   graph: 1
   n_heads: 5
-  n_stacks: 2
-  n_iters: 2
-  noralization: sym
+  
 
 train:
   cuda: 1
@@ -59,16 +60,16 @@ train:
   fraction: 0.2
   # Cube sampling 
   # lr: 0.01
-  scale: [1, 0.1]
+  scale: [1, 0.01]
   average: micro
   regularization: 0.000074845134550496
-  max_norm: 0.7
+  max_norm: 0.5
   num_samples: 20
   checkpoint: duel
   # checkpoint: test
-  tune_checkpoint: checkpoint/TorchTrainer_2024-03-12_13-40-22
+  tune_checkpoint: checkpoint/TorchTrainer_2024-03-16_17-05-19/
   checkpoint_dir: checkpoint
-  load_checkpoint: 1
+  load_checkpoint: 0
   tuned: localization
   train_fraction: 0.7
   validate_fraction: 0.3

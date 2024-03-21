@@ -266,6 +266,7 @@ class LocalizationTrainer:
                     truth = truth.cpu()
                     predicted = predicted.cpu()
                     thresholds = thresholds.cpu()
+                    ids = ids.cpu()
 
                 true_y = truth.flatten()
                 scores = thresholds.flatten()

@@ -12,7 +12,8 @@ class GCN(nn.Module):
         n_heads = conf["model"]["n_heads"]
         n_layers = conf["model"]["n_layers"]
         n_stacks = conf["model"]["n_stacks"]
-        # n_iters = conf["model"]["n_iters"]
+        n_iters = conf["model"]["n_iters"]
+        k = conf["model"]["k"]
         normalization = conf["model"]["noralization"]
         self.n_buses = conf["data"]["n_buses"]
         self.laplacian_max = LaplacianLambdaMax(normalization)
@@ -21,17 +22,18 @@ class GCN(nn.Module):
         self.gnns = nn.ModuleList()
         for i in range(n_layers):
             self.gnns.append(gnn.ChebConv(n_inputs if i == 0 else hidden_size,
-                                         hidden_size, n_stacks, normalization,  dropout=dropout))
+                                         hidden_size, k, normalization,  dropout=dropout))
         
         self.pinn_conv = nn.ModuleList()
         for i in range(n_layers):
-            self.pinn_conv.append(gnn.ChebConv(hidden_size, hidden_size if i < n_layers - 1 else n_outputs, 
-                                              n_stacks, normalization, dropout=dropout))
-            
+            self.pinn_conv.append(gnn.ChebConv(hidden_size, hidden_size, 
+                                              k, normalization, dropout=dropout))
+        self.pinn_output = nn.Linear(hidden_size * self.n_buses, n_outputs * self.n_buses)
+
         self.localize_conv = nn.ModuleList()
         for i in range(n_layers):
-            self.localize_conv.append(gnn.ChebConv(hidden_size, hidden_size,
-                                                   n_stacks, normalization, dropout=dropout))
+            self.localize_conv.append(gnn.ARMAConv(hidden_size + n_inputs if i == 0 else hidden_size, hidden_size,
+                                                   n_stacks, n_iters, dropout=dropout))
         self.classify = nn.Linear(hidden_size * self.n_buses, 2 * self.n_buses)
 
     def forward(self, data):
@@ -51,11 +53,13 @@ class GCN(nn.Module):
             pinn_output = layer(pinn_output, edge_index, edge_weights, lambda_max=data.lambda_max)
             if i < len(self.pinn_conv) - 1:
                 pinn_output = pinn_output.relu()
+        pinn_output = pinn_output.view(len(data), -1)
+        pinn_output = self.pinn_output(pinn_output)
+        pinn_output = pinn_output.view(-1, self.n_outputs)
 
-        localization_outut = x # torch.hstack((x, inputs))
+        localization_outut = torch.hstack((x, inputs))
         for i, layer in enumerate(self.localize_conv):
-            localization_outut = layer(localization_outut, edge_index, edge_weights
-                                       , lambda_max=data.lambda_max)
+            localization_outut = layer(localization_outut, edge_index, edge_weights)
             localization_outut = localization_outut.relu()
 
         localization_outut = localization_outut.view(len(data), -1)
