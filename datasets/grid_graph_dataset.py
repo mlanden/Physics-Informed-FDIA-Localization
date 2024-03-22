@@ -38,35 +38,38 @@ class GridGraphDataset(InMemoryDataset):
     def _per_unit(self):
         for bus in range(self.n_buses):
             if self.powerworld:
-                bus_base_idx = 7 * bus
+                bus_base_idx = 9 * bus
             else:
-                bus_base_idx = 6 * bus
-            for i in range(4):
-                self.features[:, bus_base_idx + i] = (self.features[:, bus_base_idx + i]
-                    * 1e6) / (self.mva_base * 1e6)
+                bus_base_idx = 8 * bus
+            for i in range(6):
+                self.features[:, bus_base_idx + i] = self.features[:, bus_base_idx + i] / self.mva_base
             if self.powerworld:
-                nominal = self.features[:, bus_base_idx + 5]
-                actual = self.features[:, bus_base_idx + 6]
+                nominal = self.features[:, bus_base_idx + 7]
+                actual = self.features[:, bus_base_idx + 8]
                 self.features[:, bus_base_idx + 5] = actual / nominal
         if self.powerworld:
             for bus in reversed(range(self.n_buses)):
-                volt_kv_idx = 7 * bus + 6
+                volt_kv_idx = 9 * bus + 8
                 self.features = np.delete(self.features, volt_kv_idx, axis=1)
         
         for bus in range(self.n_buses):
-            bus_idx = 6 * bus
+            bus_idx = 8 * bus
             gen_mvar = self.features[:, bus_idx]
-            load_mvar = self.features[:, bus_idx + 2]
+            load_mvar = self.features[:, bus_idx + 4]
             self.features[:, bus_idx] = gen_mvar - load_mvar
 
-            gen_mw = self.features[:, bus_idx + 1]
-            load_mw = self.features[:, bus_idx + 3]
-            self.features[:, bus_idx + 1] = gen_mw - load_mw
+            gen_mw = self.features[:, bus_idx + 2]
+            load_mw = self.features[:, bus_idx + 5]
+            self.features[:, bus_idx + 2] = gen_mw - load_mw
 
         for bus in reversed(range(self.n_buses)):
-            bus_idx = 6 * bus
+            bus_idx = 8 * bus
+            # loads
+            self.features = np.delete(self.features, bus_idx + 5, axis=1)
+            self.features = np.delete(self.features, bus_idx + 4, axis=1)
+            # Base power
             self.features = np.delete(self.features, bus_idx + 3, axis=1)
-            self.features = np.delete(self.features, bus_idx + 2, axis=1)
+            self.features = np.delete(self.features, bus_idx + 1, axis=1)
         
         # Y bus
         for i in range(len(self.features)):

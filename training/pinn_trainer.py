@@ -36,8 +36,7 @@ class PINNTrainer:
             self.model = GCN(conf, 2, 2)
         else:
             self.model = FCN(conf, 2 * self.n_buses + 2 * self.n_buses ** 2, 2 * self.n_buses)
-        self.equations = build_equations(conf, dataset.get_categorical_features(), 
-                                         dataset.get_continuous_features())
+        self.equations = build_equations(conf)
         
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():

@@ -34,7 +34,7 @@ class PowerGraphEquation(Equation):
         real -= graph.x[:, 1]
         reactive -= graph.x[:, 0]
 
-        loss = real + reactive
+        loss = torch.abs(real) + torch.abs(reactive)
         return loss
     
     def confidence_loss(self, input_graph: Data, output: torch.tensor, targets: torch.Tensor) -> torch.Tensor:
