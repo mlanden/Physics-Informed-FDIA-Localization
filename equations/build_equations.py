@@ -76,13 +76,14 @@ def build_equations(conf, categorical_idxs=None, continuous_idxs=None):
     elif dataset == "grid":
         n_buses = conf["data"]["n_buses"]
         graph = conf["model"]["graph"]
+        # for i in range(n_buses):
+        #     equations.append(RealPowerGraphEquation(n_buses, i))
+        #     equations.append(ReactivePowerGrapghEquation(n_buses, i))
         if graph:
-            # for i in range(n_buses):
-            #     equations.append(RealPowerGraphEquation(n_buses, i))
-            #     equations.append(ReactivePowerGrapghEquation(n_buses, i))
             equations.append(PowerGraphEquation(n_buses))
         else:
             for i in range(n_buses):
                 equations.append(RealPowerEquation(n_buses, i))
                 equations.append(ReactivePowerEquation(n_buses, i))
+
     return equations

@@ -40,7 +40,6 @@ class ReactivePowerEquation(Equation):
     def confidence_loss(self, input_states: torch.Tensor, network_outputs: torch.tensor, targets: torch.Tensor) -> torch.Tensor:
         ybus_base = 2 * self.n_buses + 2 * self.n_buses * self.bus_num
         k_bus_idx = 2 * self.bus_num
-        bus_type = self.bus_types.iloc[self.bus_num, 0]
         power_k = input_states[:, k_bus_idx + MVAR_IDX]
         theta_k = network_outputs[:, k_bus_idx]
         v_k = network_outputs[:, k_bus_idx + 1]

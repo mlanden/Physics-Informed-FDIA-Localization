@@ -1,5 +1,5 @@
-/task: train_localize
-task: localize
+task: train_localize
+# task: localize
 # task: error
 # task: test
 task: "hyperparameter_optimize"
@@ -15,7 +15,7 @@ data:
   # normal: ../data/grid/14_2_lines_out.csv
   # normal: ../data/grid/14_attack_base.csv
   attack: ../data/grid/14_perfect_fdia_train.csv
-  test: ../data/grid/14_perfect_fdia.csv
+  test: ../data/grid/14_perfect_fdia_evade_test.csv
   # attack: ../data/grid/14_attacks_2.csv
   # attack: ../data/grid/14_normal.csv
   # attack: ../data/grid/14_continuous_admittance.csv
@@ -46,7 +46,7 @@ model:
 #  profile_type: gmm
   dropout: 0.767
   threshold: 6.78
-  graph: 1
+  graph: 0
   n_heads: 5
   
 

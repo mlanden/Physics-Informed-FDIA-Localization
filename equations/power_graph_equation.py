@@ -35,6 +35,10 @@ class PowerGraphEquation(Equation):
         reactive -= graph.x[:, 0]
 
         loss = torch.abs(real) + torch.abs(reactive)
+        loss = loss.view(len(graph), -1)
+        attack = torch.max(graph.classes, dim=1).values
+        loss[attack == 1] = 0
+
         return loss
     
     def confidence_loss(self, input_graph: Data, output: torch.tensor, targets: torch.Tensor) -> torch.Tensor:
@@ -61,5 +65,9 @@ class PowerGraphEquation(Equation):
         reactive -= input_graph.x[:, 0]
 
         loss = real ** 2 + reactive ** 2
+        loss = loss.view(len(input_graph), -1)
+        attack = torch.max(input_graph.classes, dim=1).values
+        loss[attack == 1] = 0
+        loss = loss.flatten()
         return loss
 

@@ -41,7 +41,7 @@ class RealPowerEquation(Equation):
     def confidence_loss(self, input_states: torch.Tensor, network_outputs: torch.tensor, targets: torch.Tensor) -> torch.Tensor:
         k_bus_idx = 2 * self.bus_num
         ybus_base = 2 * self.n_buses + 2 * self.n_buses * self.bus_num
-        power_k = input_states[:, k_bus_idx+ 1]
+        power_k = input_states[:, k_bus_idx + 1]
         theta_k = network_outputs[:, k_bus_idx]
         v_k = network_outputs[:, k_bus_idx + 1]
 

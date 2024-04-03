@@ -4,6 +4,7 @@ import json
 import numpy as np
 import pandas as pd
 from typing import List, Tuple
+from sklearn.preprocessing import MultiLabelBinarizer
 import torch
 from torch_geometric.data import Data, InMemoryDataset
 from torch_geometric.loader import DataLoader
@@ -115,6 +116,15 @@ class GridGraphDataset(InMemoryDataset):
         self.locations = data.iloc[:, -1].to_numpy()
         self.labels = data.iloc[:, -2] == "yes"
         self.labels = self.labels.to_numpy()
+        label_idxs = []
+        for i in range(len(self.locations)):
+            if str(self.locations[i]) != "-1":
+                label_idxs.append(json.loads(self.locations[i]))
+            else:
+                label_idxs.append([])
+        mlb = MultiLabelBinarizer()
+        locations = mlb.fit_transform(label_idxs)
+
         self._per_unit()
         self.features = self.features.astype(np.float32)
 
@@ -132,12 +142,7 @@ class GridGraphDataset(InMemoryDataset):
         grids = []
         for graph in tqdm(range(len(self.features))):
             nodes = self.features[graph, self.input_mask][:2 * self.n_buses].reshape(self.n_buses, 2)
-            location = self.locations[graph]
-            classes = torch.zeros(2 * self.n_buses)
-            if str(location) != "-1":
-                location = json.loads(location)
-                classes.scatter_(0, torch.tensor(location), 1)
-
+            
             sources = []
             targets = []
             edge_features = []
@@ -160,7 +165,7 @@ class GridGraphDataset(InMemoryDataset):
                         edge_index=edge_index,
                         edge_attr=torch.tensor(np.array(edge_features), dtype=torch.float),
                         y=torch.tensor(targets),
-                        classes=classes.view(1, -1),
+                        classes=torch.tensor(locations[graph], dtype=torch.float32).view(1, -1),
                         idx=torch.tensor(graph)
                         )
             grids.append(data)

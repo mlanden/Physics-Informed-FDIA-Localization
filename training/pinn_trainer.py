@@ -229,7 +229,6 @@ class PINNTrainer:
             dist.barrier()
 
     def create_normal_profile(self, rank, dataset):
-    
         if not path.exists(self.checkpoint_path):
             if rank == 0:
                 print("Checpoint does not exist")

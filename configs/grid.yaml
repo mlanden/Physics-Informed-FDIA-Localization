@@ -1,3 +1,4 @@
+# task: train_pinn
 task: train_localize
 task: localize
 # task: error
@@ -9,21 +10,13 @@ task: localize
 data: 
   type: grid
   normal: ../data/grid/14_normal.csv
-  # normal: ../data/grid/14_continuous_admittance.csv
-  # normal: ../data/grid/14_cube_sampling.csv
-  normal: ../data/grid//14_lines_out.csv
-  # normal: ../data/grid/14_2_lines_out.csv
-  # normal: ../data/grid/14_attack_base.csv
+  normal: ../data/grid/14_continuous_admittance_evade.csv
   # normal: ../data/grid/14_perfect_fdia_train.csv
   attack: ../data/grid/14_perfect_fdia_train.csv
-  test: ../data/grid/14_perfect_fdia.csv
-  # attack: ../data/grid/14_attacks_2.csv
-  # attack: ../data/grid/14_normal.csv
-  # attack: ../data/grid/14_continuous_admittance.csv
-  # attack: ../data/grid/14_line_1_out.csv
-  attack_base: ../data/grid/14_continuous_admittance.csv
-  # attack_base: ../data/grid/14_lines_out.csv
-  types: ../data/grid/14_types.csv
+  test: ../data/grid/14_perfect_fdia_evade_test.csv
+  attack_base: ../data/grid/14_continuous_admittance_evade.csv
+  attack_base: ../data/grid/14_lines_out_evade.csv
+  limits: ../data/grid/14_limits.csv
   ybus: ../data/grid/14_ybus.csv
   n_buses: 14
   mva_base: 100
@@ -36,40 +29,40 @@ attack:
   network_parameter_error: 0
   state_variable_error: 0
 model:
-  hidden_size: 128
-  n_stacks: 2
-  k: 3
-  n_iters: 2
-  noralization: sym
-  n_layers: 2
+  hidden_size: 16
+  n_stacks: 3
+  k: 2
+  n_iters: 4
+  noralization: rw
+  n_layers: 7
   sequence_length: 10
   activation: relu
   profile_type: mean
 #  profile_type: gmm
   dropout: 0.42
   threshold: 6.78
-  graph: 1
+  graph: 0
   n_heads: 6
 
 train:
   cuda: 1
-  gpus: 3
+  gpus: 1
   nodes: 1
   batch_size: 64
-  epochs: 200
+  epochs: 100
   lr: 0.001
   max_norm: 1
   # Cube sampling 
   # lr: 0.01
   fraction: 0.2
-  scale: [1, 0.01]
+  scale: [1, 0.001]
   average: micro
   regularization: 0.001
   num_samples: 20
-  checkpoint: hybrid
+  checkpoint: cnn
   checkpoint_dir: checkpoint/
   tune_checkpoint: checkpoint/TorchTrainer_2024-02-10_11-13-26
-  load_checkpoint: 1
+  load_checkpoint: 0
   tuned: local
   train_fraction: 0.8
   validate_fraction: 0.2
