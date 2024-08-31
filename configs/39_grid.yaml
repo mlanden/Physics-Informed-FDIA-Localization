@@ -1,0 +1,63 @@
+task: train_localize
+task: localize
+# task: "hyperparameter_optimize"
+# task: attack_generation
+data: 
+  type: grid
+  attack: ../data/grid/39_perfect_fdia_evade_train.csv
+  test: ../data/grid/39_perfect_fdia_evade_test.csv
+  attack_base: ../data/grid/39_continuous_admittance_evade-2.csv
+  attack_base: ../data/grid/39_fixed_evade.csv
+  attack_base: ../data/grid/39_lines_out_evade.csv
+  limits: ../data/grid/39_limits.csv
+  ybus: ../data/grid/39_ybus.csv
+  n_buses: 39
+  mva_base: 100
+  powerworld: 0
+
+attack:
+  bias: 0.2
+  network_parameter_error: 0.1
+  state_variable_error: 0.07
+  network_parameter_error: 0
+  state_variable_error: 0
+model:
+  hidden_size: 128
+  n_stacks: 2
+  n_iters: 5
+  noralization: sym
+  k: 4
+  n_layers: 7
+  dropout: 0.4857776458015972
+  graph: 1
+  n_heads: 2
+  
+train:
+  cuda: 1
+  gpus: 4
+  nodes: 1
+  batch_size: 64
+  epochs: 500
+  lr: 0.0004572598433115627
+  fraction: 0.2
+  # Cube sampling 
+  # lr: 0.01
+  scale: [1, 0.0001]
+  average: micro
+  regularization: 0.00000234236201048029
+  max_norm: 0.1
+  num_samples: 20
+  checkpoint: perfect_a
+  tune_checkpoint: checkpoint/TorchTrainer_2024-04-15_16-33-56/
+  checkpoint_dir: checkpoint/39_bus
+  load_checkpoint: 0
+  tuned: localization
+  train_fraction: 0.7
+  validate_fraction: 0.3
+  find_error_fraction: 0.25
+  # train_fraction: 0
+  # validate_fraction: 0
+  # find_error_fraction: 1
+  equation_name: grid
+  physics: 1
+  population_train: 0

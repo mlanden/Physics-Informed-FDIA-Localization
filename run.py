@@ -88,7 +88,7 @@ def localize():
              join=True)
     
 def hyperparameter_optimize():
-    conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
+    # conf["data"]["normal"] = path.abspath(conf["data"]["normal"])
     conf["data"]["attack"] = path.abspath(conf["data"]["attack"])
     conf["data"]["ybus"] = path.abspath(conf["data"]["ybus"])
     conf["train"]["checkpoint_dir"] = path.abspath(conf["train"]["checkpoint_dir"])
@@ -106,13 +106,13 @@ def hyperparameter_optimize():
 
     if not population_training:
         config.update({
-            # "n_stacks": tune.choice([2, 3, 4]),
+            "n_stacks": tune.choice([2, 3, 4]),
             "k": tune.choice([2, 3, 4]),
             # "n_heads": tune.choice([i for i in range(2, 9)]),
-            "size": tune.choice([2 ** i for i in range(4, 8)]),
+            "size": tune.choice([2 ** i for i in range(4, 11)]),
             "n_layers": tune.choice([i for i in range(2, 8)]),
-            # "n_iters": tune.choice([2, 3, 4, 5]),
-            # "normalization": tune.choice(["sym", "rw"])
+            "n_iters": tune.choice([2, 3, 4, 5]),
+            "normalization": tune.choice(["sym", "rw"])
         })
     if not population_training:
         scheduler = ASHAScheduler(
@@ -157,7 +157,7 @@ def hyperparameter_optimize():
             num_samples=conf["train"]["num_samples"],
             scheduler=scheduler,
             search_alg=algo,
-            max_concurrent_trials=3
+            max_concurrent_trials=4
         ),
         run_config=RunConfig(storage_path=path.abspath("./checkpoint"),
                              checkpoint_config=CheckpointConfig(num_to_keep=4, 
@@ -206,10 +206,6 @@ if __name__ == '__main__':
         train_localize()
     elif task == "localize":
         localize()
-    elif task == "error":
-        get_normal_profile()
-    elif task == "test":
-        detect()
     elif task == "hyperparameter_optimize":
         hyperparameter_optimize()
     elif task == "equ_error":

@@ -219,7 +219,7 @@ def generate_fdia(conf):
     new_states = np.row_stack(new_states)
 
     attacks = pd.DataFrame(new_states, columns=base_states_pd.columns)
-    attacks.to_csv(conf["data"]["attack"], index=False)
+    attacks.to_csv(conf["data"]["test"], index=False)
 
     ax = plt.subplot()
     ax.hist(attacked_busses)

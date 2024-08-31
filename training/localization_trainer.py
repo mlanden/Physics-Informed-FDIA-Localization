@@ -1,4 +1,5 @@
 import json
+import time
 import  os
 import tempfile
 from os import path
@@ -33,6 +34,7 @@ class LocalizationTrainer:
         self.scale = conf["train"]["scale"]
         self.graph = conf["model"]["graph"]
         self.n_buses = conf["data"]["n_buses"]
+        self.physics = conf['train']["physics"]
         self.equations = build_equations(conf)
         if self.graph:
             self.localize_model = GCN(self.conf, 2, 2)
@@ -42,7 +44,7 @@ class LocalizationTrainer:
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
             os.environ['MASTER_ADDR'] = '127.0.0.1'
-            os.environ['MASTER_PORT'] = '29507'
+            os.environ['MASTER_PORT'] = '29509'
             if self.conf["train"]["cuda"]:
                 backend = "nccl"
             else:
@@ -119,7 +121,7 @@ class LocalizationTrainer:
             tb_writer = SummaryWriter(path.join(tb_dir, f"version_{version}"))
 
         early_stopping = EarlyStopping(20, 0.0001)
-        # torch.autograd.set_detect_anomaly(True)
+        torch.autograd.set_detect_anomaly(True)
         for epoch in range(start_epoch, epochs):
             self.localize_model.train()
             train_loader.sampler.set_epoch(epoch)
@@ -240,7 +242,7 @@ class LocalizationTrainer:
 
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         
-        localize_chpt = torch.load(self.localize_model_path)
+        localize_chpt = torch.load(self.localize_model_path, device)
         self.localize_model.load_state_dict(localize_chpt["model"])
         self.localize_model = self.localize_model.to(device)
         self.localize_model.eval()
@@ -249,7 +251,7 @@ class LocalizationTrainer:
         predicted = []
         truth = []
         thresholds = []
-        ids = []
+        times = []
         if rank == 0:
             data_loader = tqdm(loader)
         else:
@@ -264,17 +266,28 @@ class LocalizationTrainer:
                     inputs, targets = data
                     inputs = inputs.to(device)
                     targets = targets.to(device)
-                
-                _, logits, _ = self.localize_model(inputs, targets)
+
+                start = time.time()   
+                _, logits, _ = self.localize_model(inputs, targets, physics=False)
                 threshold = torch.sigmoid(logits)
+                length = time.time() - start
+                times.append(length)
                 prediction = threshold > 0.5
                 thresholds.append(threshold)
                 predicted.append(prediction.float())
                 truth.append(targets)
                 # ids.append(data.idx.float())
+            
+            if self.size == 1:
+                truth = truth.cpu()
+                predicted = predicted.cpu()
+                thresholds = thresholds.cpu()
+                # ids = ids.cpu()
+                times = times.cpu()
             thresholds = torch.cat(thresholds)
             predicted = torch.cat(predicted)
             truth = torch.cat(truth)
+            times = torch.tensor(times, device=device)
             # ids = torch.cat(ids)
 
             if rank == 0:
@@ -295,11 +308,11 @@ class LocalizationTrainer:
                     #            for _ in range(self.size)]
                     # dist.gather(ids, all_ids, 0)
                     # ids = torch.cat(all_ids).cpu()
-                else:
-                    truth = truth.cpu()
-                    predicted = predicted.cpu()
-                    thresholds = thresholds.cpu()
-                    # ids = ids.cpu()
+                    all_times = [torch.empty(times.size(), device=device)
+                                             for _ in range(self.size)]
+                    dist.gather(times, all_times, 0)
+                    times = torch.cat(all_times).cpu()
+                    print(times.size())
 
                 true_y = truth.flatten()
                 scores = thresholds.flatten()
@@ -328,24 +341,30 @@ class LocalizationTrainer:
                 print(f"Precision: {precision * 100}")
                 print(f"F1 score: {f1score * 100}")
                 print(f"False positive rate: {avg_fpr * 100}")
+                print(f"Aveerage evaluation time: {torch.mean(times)}")
             elif self.size > 1:
                 dist.gather(predicted, [], 0)
                 dist.gather(truth, [], 0)
                 dist.gather(thresholds, [], 0)
                 # dist.gather(ids, [], 0)
+                dist.gather(times, [], 0)
 
     def compute_loss(self, inputs, targets):
         pinn_output, localization_output, no_attack_graphs = self.localize_model(inputs, targets)
         localization_loss = F.binary_cross_entropy_with_logits(localization_output, targets)
 
-        if self.graph:
-            physics_loss = torch.zeros((len(no_attack_graphs.x), len(self.equations)), 
-                                    device=pinn_output.device)
+        if pinn_output is not None  and self.physics:
+            if self.graph:
+                physics_loss = torch.zeros((len(no_attack_graphs.x), len(self.equations)), 
+                                        device=localization_output.device)
+            else:
+                physics_loss = torch.zeros((len(no_attack_graphs), len(self.equations)), 
+                                        device=localization_output.device)
+            for i, equation in enumerate(self.equations):
+                physics_loss[:, i] = equation.confidence_loss(no_attack_graphs, pinn_output, None)
         else:
-            physics_loss = torch.zeros((len(no_attack_graphs), len(self.equations)), 
-                                    device=pinn_output.device)
-        for i, equation in enumerate(self.equations):
-            physics_loss[:, i] = equation.confidence_loss(no_attack_graphs, pinn_output, None)
+            physics_loss = torch.zeros_like(localization_loss)
+            
         physics_loss = physics_loss.mean()
         localization_loss = localization_loss.mean()
         loss = self.scale[0] * localization_loss + self.scale[1] * physics_loss

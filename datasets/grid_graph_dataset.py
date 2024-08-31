@@ -109,67 +109,69 @@ class GridGraphDataset(InMemoryDataset):
 
     def base_process(self):
         self.standard_topology = pd.read_csv(self.conf["data"]["ybus"]).map(to_complex)
-        data = pd.read_csv(self.data_path)
-        if self.sample:
-            data = data.sample(frac=1)
-        self.features = data.iloc[:, 2: -2].to_numpy()
-        self.locations = data.iloc[:, -1].to_numpy()
-        self.labels = data.iloc[:, -2] == "yes"
-        self.labels = self.labels.to_numpy()
-        label_idxs = []
-        for i in range(len(self.locations)):
-            if str(self.locations[i]) != "-1":
-                label_idxs.append(json.loads(self.locations[i]))
-            else:
-                label_idxs.append([])
-        mlb = MultiLabelBinarizer()
-        locations = mlb.fit_transform(label_idxs)
-
-        self._per_unit()
-        self.features = self.features.astype(np.float32)
-
-        self.input_mask = []
-        self.output_mask = []
-        for bus in range(self.n_buses):
-            bus_base_idx = 4 * bus
-            self.input_mask.append(bus_base_idx)
-            self.input_mask.append(bus_base_idx + 1)
-            self.output_mask.append(bus_base_idx + 2)
-            self.output_mask.append(bus_base_idx + 3)
-            
-        self.input_mask.extend(list(range(4 * self.n_buses, len(self.features[0]))))
-
         grids = []
-        for graph in tqdm(range(len(self.features))):
-            nodes = self.features[graph, self.input_mask][:2 * self.n_buses].reshape(self.n_buses, 2)
-            
-            sources = []
-            targets = []
-            edge_features = []
-            i = 0
-            j = 0
-            for pos in range(4 * self.n_buses, len(self.features[graph]), 2):
-                if (self.standard_topology.iloc[i, j].real != 0 or 
-                        self.standard_topology.iloc[i, j].imag != 0):
-                    sources.append(i)
-                    targets.append(j)
-                    edge_features.append(self.features[graph, pos: pos + 2])
-                j += 1
-                if j == self.n_buses:
+        chunksize = 10 ** 5
+        with pd.read_csv(self.data_path, chunksize=chunksize) as reader:
+            for data in reader:
+                if self.sample:
+                    data = data.sample(frac=1)
+                self.features = data.iloc[:, 2: -2].to_numpy()
+                self.locations = data.iloc[:, -1].to_numpy()
+                self.labels = data.iloc[:, -2] == "yes"
+                self.labels = self.labels.to_numpy()
+                label_idxs = []
+                for i in range(len(self.locations)):
+                    if str(self.locations[i]) != "-1":
+                        label_idxs.append(json.loads(self.locations[i]))
+                    else:
+                        label_idxs.append([])
+                mlb = MultiLabelBinarizer()
+                locations = mlb.fit_transform(label_idxs)
+
+                self._per_unit()
+                self.features = self.features.astype(np.float32)
+
+                self.input_mask = []
+                self.output_mask = []
+                for bus in range(self.n_buses):
+                    bus_base_idx = 4 * bus
+                    self.input_mask.append(bus_base_idx)
+                    self.input_mask.append(bus_base_idx + 1)
+                    self.output_mask.append(bus_base_idx + 2)
+                    self.output_mask.append(bus_base_idx + 3)
+                    
+                self.input_mask.extend(list(range(4 * self.n_buses, len(self.features[0]))))
+
+                for graph in tqdm(range(len(self.features))):
+                    nodes = self.features[graph, self.input_mask][:2 * self.n_buses].reshape(self.n_buses, 2)
+                    
+                    sources = []
+                    targets = []
+                    edge_features = []
+                    i = 0
                     j = 0
-                    i += 1
-            edge_index = torch.tensor([sources, targets], dtype=torch.long)
-            targets = self.features[graph, self.output_mask].reshape(self.n_buses, 2)
-            
-            data = Data(x=torch.tensor(nodes, dtype=torch.float),
-                        edge_index=edge_index,
-                        edge_attr=torch.tensor(np.array(edge_features), dtype=torch.float),
-                        y=torch.tensor(targets),
-                        classes=torch.tensor(locations[graph], dtype=torch.float32).view(1, -1),
-                        idx=torch.tensor(graph)
-                        )
-            grids.append(data)
-            
+                    for pos in range(4 * self.n_buses, len(self.features[graph]), 2):
+                        if (self.standard_topology.iloc[i, j].real != 0 or 
+                                self.standard_topology.iloc[i, j].imag != 0):
+                            sources.append(i)
+                            targets.append(j)
+                            edge_features.append(self.features[graph, pos: pos + 2])
+                        j += 1
+                        if j == self.n_buses:
+                            j = 0
+                            i += 1
+                    edge_index = torch.tensor([sources, targets], dtype=torch.long)
+                    targets = self.features[graph, self.output_mask].reshape(self.n_buses, 2)
+                    
+                    data = Data(x=torch.tensor(nodes, dtype=torch.float),
+                                edge_index=edge_index,
+                                edge_attr=torch.tensor(np.array(edge_features), dtype=torch.float),
+                                y=torch.tensor(targets),
+                                classes=torch.tensor(locations[graph], dtype=torch.float32).view(1, -1),
+                                idx=torch.tensor(graph)
+                                )
+                    grids.append(data)
+                    
         self.save(grids, self.processed_paths[0])
     
     @torch.no_grad

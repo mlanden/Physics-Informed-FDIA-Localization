@@ -26,10 +26,10 @@ class CNN(nn.Module):
             self.localization_layers.append(nn.Conv1d(hidden_size, hidden_size, k))
         self.localization_linear = nn.Linear(hidden_size * linear_input, n_outputs)
         
-        self.pinn_layers = nn.ModuleList()
-        for i in range(n_layers):
-            self.pinn_layers.append(nn.Conv1d(hidden_size, hidden_size, k))
-        self.pinn_linear = nn.Linear(hidden_size * linear_input, n_outputs)
+        # self.pinn_layers = nn.ModuleList()
+        # for i in range(n_layers):
+        #     self.pinn_layers.append(nn.Conv1d(hidden_size, hidden_size, k))
+        # self.pinn_linear = nn.Linear(hidden_size * linear_input, n_outputs)
     
     def forward(self, inputs, targets):
         input = inputs.unsqueeze(1)
@@ -52,11 +52,11 @@ class CNN(nn.Module):
         localization_output = torch.flatten(localization_output, 1)
         localization_output = self.localization_linear(localization_output)
         
-        for layer in self.pinn_layers:
-            pinn_output = layer(pinn_output)
-            pinn_output = F.dropout(pinn_output, self.dropout)
-            pinn_output = pinn_output.relu()
-        pinn_output = torch.flatten(pinn_output, 1)
-        pinn_output = self.pinn_linear(pinn_output)
+        # for layer in self.pinn_layers:
+        #     pinn_output = layer(pinn_output)
+        #     pinn_output = F.dropout(pinn_output, self.dropout)
+        #     pinn_output = pinn_output.relu()
+        # pinn_output = torch.flatten(pinn_output, 1)
+        # pinn_output = self.pinn_linear(pinn_output)
         
-        return pinn_output, localization_output, input[attack].squeeze(1)
+        return None, localization_output, input[attack].squeeze(1)
