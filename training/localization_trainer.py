@@ -278,20 +278,21 @@ class LocalizationTrainer:
                 truth.append(targets)
                 # ids.append(data.idx.float())
             
-            if self.size == 1:
-                truth = truth.cpu()
-                predicted = predicted.cpu()
-                thresholds = thresholds.cpu()
-                # ids = ids.cpu()
-                times = times.cpu()
             thresholds = torch.cat(thresholds)
             predicted = torch.cat(predicted)
             truth = torch.cat(truth)
             times = torch.tensor(times, device=device)
             # ids = torch.cat(ids)
 
+
             if rank == 0:
-                if self.size > 1:
+                if self.size == 1:
+                    truth = truth.cpu()
+                    predicted = predicted.cpu()
+                    thresholds = thresholds.cpu()
+                    # ids = ids.cpu()
+                    times = times.cpu()
+                else:
                     all_predicted = [torch.empty(predicted.size(), device=device)
                                     for _ in range(self.size)]
                     dist.gather(predicted, all_predicted, 0)

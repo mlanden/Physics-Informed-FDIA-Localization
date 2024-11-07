@@ -34,7 +34,7 @@ model:
   
 train:
   cuda: 1
-  gpus: 4
+  gpus: 1
   nodes: 1
   batch_size: 64
   epochs: 500
