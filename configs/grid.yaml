@@ -1,67 +1,77 @@
-task: train
+# task: train_pinn
+task: train_localize
+task: localize
 # task: error
-task: test
+# task: test
 # task: "hyperparameter_optimize"
 # task: equations
 # task: equ_error
-task: attack_generation
+# task: attack_generation
 data: 
   type: grid
   normal: ../data/grid/14_normal.csv
-  normal: ../data/grid/14_continuous_admittance.csv
-  normal: ../data/grid/14_cube_sampling.csv
-  # normal: ../data/grid//14_lines_out.csv
-  # normal: ../data/grid/14_2_lines_out.csv
-  # normal: ../data/grid/118_state.csv
-  # normal: ../data/grid/14_simple.csv
-  attack: ../data/grid/14_attacks_test.csv
-  # attack: ../data/grid/14_attacks_2.csv
-  # attack: ../data/grid/14_normal.csv
-  # attack: ../data/grid/14_continuous_admittance.csv
-  # attack: ../data/grid/14_line_1_out.csv
-  attack_base: ../data/grid/14_attack_bas.csv
-  types: ../data/grid/14_types.csv
+  normal: ../data/grid/14_continuous_admittance_evade.csv
+  # normal: ../data/grid/14_perfect_fdia_train.csv
+  attack: ../data/grid/14_imperfect_fdia_evade_train.csv
+  test: ../data/grid/14_imperfect_fdia_evade_test.csv
+  attack_base: ../data/grid/14_continuous_admittance_evade.csv
+  # attack_base: ../data/grid/14_lines_out_evade.csv
+  attack_base: ../data/grid/14_normal_evade.csv
+  limits: ../data/grid/14_limits.csv
   ybus: ../data/grid/14_ybus.csv
   n_buses: 14
   mva_base: 100
   powerworld: 0
 
 attack:
+  bias: 0.2
   network_parameter_error: 0.1
   state_variable_error: 0.07
+  network_parameter_error: 0
+  state_variable_error: 0
 model:
-  hidden_size: 20
-  layer_sizes: [40, 20, 10]
-  n_layers: 6
+  hidden_size: 128
+  n_stacks: 4
+  n_iters: 4
+  noralization: sym
+  k: 2
+  n_layers: 2
   sequence_length: 10
   activation: relu
   profile_type: mean
 #  profile_type: gmm
-  dropout: 0
-  threshold: 195.5
+  dropout: 0.374
+  threshold: 6.78
   graph: 1
-  n_heads: 3
+  n_heads: 5
+  
+
 train:
   cuda: 1
-  gpus: 4
+  gpus: 3
   nodes: 1
   batch_size: 64
-  epochs: 800
-  lr: 0.05
+  epochs: 500
+  lr: 0.0008
+  fraction: 0.2
   # Cube sampling 
   # lr: 0.01
-  scale: [0.1, 1]
-  regularization: 0.001
+  scale: [1, 0.01]
+  average: micro
+  regularization: 0.00000047776
+  max_norm: 0.5
   num_samples: 20
-  checkpoint: grid_14_line_sampling
-  checkpoint_dir: checkpoint
+  checkpoint: imperfect_a
+  tune_checkpoint: checkpoint/TorchTrainer_2024-03-16_17-05-19/
+  checkpoint_dir: checkpoint/14_bus
   load_checkpoint: 0
-
-  train_fraction: 0.5
-  validate_fraction: 0.25
+  tuned: localization
+  train_fraction: 0.7
+  validate_fraction: 0.3
   find_error_fraction: 0.25
   # train_fraction: 0
   # validate_fraction: 0
   # find_error_fraction: 1
   equation_name: grid
-  physics: 1
+  physics: 0
+  population_train: 0

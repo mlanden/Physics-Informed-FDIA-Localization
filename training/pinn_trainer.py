@@ -25,18 +25,18 @@ class PINNTrainer:
         self.scale = conf["train"]["scale"]
         self.use_physics = conf["train"]["physics"]
         self.use_graph = conf["model"]["graph"]
+        self.model_name = "pinn.pt"
 
         self.n_buses = conf["data"]["n_buses"]
         self.checkpoint_dir = path.join(conf["train"]["checkpoint_dir"], conf["train"]["checkpoint"])
-        self.checkpoint_path = path.join(self.checkpoint_dir, "model.pt")
+        self.checkpoint_path = path.join(self.checkpoint_dir, self.model_name)
         self.size = self.conf["train"]["gpus"]
 
         if self.use_graph:
             self.model = GCN(conf, 2, 2)
         else:
             self.model = FCN(conf, 2 * self.n_buses + 2 * self.n_buses ** 2, 2 * self.n_buses)
-        self.equations = build_equations(conf, dataset.get_categorical_features(), 
-                                         dataset.get_continuous_features())
+        self.equations = build_equations(conf)
         
     def _init_ddp(self, rank, datasets, shuffles):
         if not ray.is_initialized():
@@ -77,7 +77,7 @@ class PINNTrainer:
     def train(self, rank, train_dataset, val_dataset):
         start_epoch = 0
         best_loss = torch.inf
-        optim = torch.optim.Adam(self.model.parameters(), lr = self.conf["train"]["lr"],
+        optim = torch.optim.Adam(self.model.parameters(), lr=self.conf["train"]["lr"],
                                   weight_decay=self.conf["train"]["regularization"])
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optim, factor=0.5)
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
@@ -88,7 +88,7 @@ class PINNTrainer:
             checkpoint = train.get_checkpoint()
             if checkpoint:
                 with checkpoint.as_directory() as checkpoint_dir:
-                    checkpoint = torch.load(path.join(checkpoint_dir, "model.pt"))
+                    checkpoint = torch.load(path.join(checkpoint_dir, self.model_name))
         elif self.conf["train"]["load_checkpoint"] and path.exists(self.checkpoint_path):
             checkpoint = torch.load(self.checkpoint_path)
         
@@ -106,19 +106,22 @@ class PINNTrainer:
         epochs = self.conf["train"]["epochs"]
 
         if rank == 0 and not ray.is_initialized():
-            if not path.exists(self.checkpoint_dir):
-                os.makedirs(self.checkpoint_dir)
-            version = len([name for name in os.listdir(self.checkpoint_dir) if path.isdir(path.join(self.checkpoint_dir, name))]) + 1
+            tb_dir = path.join(self.checkpoint_dir, "pinn_training")
+            if not path.exists(tb_dir):
+                os.makedirs(tb_dir)
+            version = len([name for name in os.listdir(tb_dir) if path.isdir(path.join(tb_dir, name))]) + 1
             print("Version:", version)
-            tb_writer = SummaryWriter(path.join(self.checkpoint_dir, f"version_{version}"))
+            tb_writer = SummaryWriter(path.join(tb_dir, f"version_{version}"))
         
         for epoch in range(start_epoch, epochs):
+            self.model.train()
             train_loader.sampler.set_epoch(epoch)
             if rank == 0 and not ray.is_initialized():
                 loader = tqdm(train_loader, position=0, leave=True)
             else:
                 loader = train_loader
             total_loss = 0
+
             for data in loader:
                 optim.zero_grad()
                 if not self.use_graph:
@@ -131,6 +134,8 @@ class PINNTrainer:
                     targets = data.y
                 data_loss, physics_loss, loss = self._combine_losses(inputs, targets)
                 loss.backward()
+                if self.conf["train"]["max_norm"] > 0:
+                    torch.nn.utils.clip_grad.clip_grad_norm_(self.model.parameters(), self.conf["train"]["max_norm"])
                 optim.step()
                 total_loss += loss.detach()
                 if rank == 0 and not ray.is_initialized():
@@ -152,6 +157,7 @@ class PINNTrainer:
             else:
                 loader = val_loader
 
+            self.model.eval()
             with torch.no_grad():
                 total_data_loss = 0
                 total_physics_loss = 0
@@ -199,13 +205,14 @@ class PINNTrainer:
                             tb_writer.add_scalar("Data loss", total_data_loss, epoch)
                             tb_writer.add_scalar("Physics loss", total_physics_loss, epoch)
 
-                    if loss < best_loss:
+                    if loss < best_loss or ray.is_initialized() or 1:
                         try:
                             model = self.model.module
                         except AttributeError:
                             model = self.model
                         checkpoint = {
                             "model": model.state_dict(),
+                            "structure": self.conf["model"],
                             "optim": optim.state_dict(),
                             "schedule": scheduler.state_dict(),
                             "loss": total_loss.item(),
@@ -213,7 +220,7 @@ class PINNTrainer:
                         }
                         if ray.is_initialized():
                             with tempfile.TemporaryDirectory() as tempdir:
-                                torch.save(checkpoint, path.join(tempdir, "model.pt"))
+                                torch.save(checkpoint, path.join(tempdir, self.model_name))
                                 train.report({"loss": total_loss.item()}, checkpoint=
                                             train.Checkpoint.from_directory(tempdir))
                                 print(f"Epoch {epoch}: Loss: {total_loss.item()}")
@@ -222,13 +229,14 @@ class PINNTrainer:
             dist.barrier()
 
     def create_normal_profile(self, rank, dataset):
-    
         if not path.exists(self.checkpoint_path):
             if rank == 0:
                 print("Checpoint does not exist")
             return
         device = torch.device(f"cuda:{rank}") if self.conf["train"]["cuda"] else torch.device("cpu")
         checkpoint = torch.load(self.checkpoint_path)
+        if rank == 0:
+            print(checkpoint["structure"])
         self.model.load_state_dict(checkpoint["model"])
         self.model.eval()
         if rank == 0:

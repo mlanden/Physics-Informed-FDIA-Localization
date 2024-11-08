@@ -16,6 +16,8 @@ def to_complex(s: str):
         return complex(0)
     else:
         s = s.replace(" ", "")
+        s = s.replace("(", "")
+        s = s.replace(")", "")
         if "j" in s:
             s = s.replace("j", "") + "j"
         s = s.replace("i", "j")

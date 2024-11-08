@@ -10,10 +10,9 @@ THETA_IDX = 2
 MW_IDX = 1
 class RealPowerEquation(Equation):
 
-    def __init__(self, n_buses, bus_num, bus_type_file) -> None:
+    def __init__(self, n_buses, bus_num) -> None:
         self.n_buses = n_buses
         self.bus_num = bus_num
-        self.bus_types = pd.read_csv(bus_type_file)
         self.bus_losses = []
         self.ybus_base = 4 * self.n_buses + 2 * self.n_buses * self.bus_num
     
@@ -42,37 +41,15 @@ class RealPowerEquation(Equation):
     def confidence_loss(self, input_states: torch.Tensor, network_outputs: torch.tensor, targets: torch.Tensor) -> torch.Tensor:
         k_bus_idx = 2 * self.bus_num
         ybus_base = 2 * self.n_buses + 2 * self.n_buses * self.bus_num
-        bus_type = self.bus_types.iloc[self.bus_num, 0]
-        if bus_type == 1:
-            # PQ
-            power_k = input_states[:, k_bus_idx+ 1]
-            theta_k = network_outputs[:, k_bus_idx]
-            v_k = network_outputs[:, k_bus_idx + 1]
-        elif bus_type == 2:
-            # PV
-            power_k = input_states[:, k_bus_idx + 1]
-            theta_k = network_outputs[:, k_bus_idx + 1]
-            v_k = input_states[:, k_bus_idx + 1]
-        elif bus_type == 3:
-            power_k = network_outputs[:, k_bus_idx + 1] 
-            theta_k = input_states[:, k_bus_idx]
-            v_k = input_states[:, k_bus_idx + 1]
-        
+        power_k = input_states[:, k_bus_idx + 1]
+        theta_k = network_outputs[:, k_bus_idx]
+        v_k = network_outputs[:, k_bus_idx + 1]
+
         bus_loss = 0
         for bus_j in range(self.n_buses):
             j_bus_idx = 2 * bus_j
-            bus_type = self.bus_types.iloc[bus_j, 0]
-            if bus_type == 1:
-                # PQ
-                theta_j = network_outputs[:, j_bus_idx]
-                v_j = network_outputs[:, j_bus_idx + 1]
-            elif bus_type == 2:
-                # PV
-                theta_j = network_outputs[:, j_bus_idx + 1]
-                v_j = input_states[:, j_bus_idx + 1]
-            elif bus_type == 3:
-                theta_j = input_states[:, j_bus_idx]
-                v_j = input_states[:, j_bus_idx + 1]
+            theta_j = network_outputs[:, j_bus_idx]
+            v_j = network_outputs[:, j_bus_idx + 1]
                 
             radians = (torch.pi / 180) * (theta_k - theta_j)
             admittance_idx = ybus_base + 2 * bus_j
