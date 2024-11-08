@@ -21,31 +21,10 @@ from ray.tune.search.hyperopt import HyperOptSearch
 
 from datasets import GridDataset, GridGraphDataset
 from models import GCN
-from training import PINNTrainer, LocalizationTrainer
+from training import LocalizationTrainer
 from equations import build_equations
 from utils import generate_fdia
 
-def train_pinn(config: dict=None):
-    if config is not None:
-        conf["model"]["n_heads"] = config.get("n_heads", conf["model"]["n_heads"])
-        conf["model"]["hidden_size"] = config.get("size", conf["model"]["hidden_size"])
-        conf["model"]["n_layers"] = config.get("n_layers", conf["model"]["n_layers"])
-        conf["train"]["lr"] = config["lr"]
-        conf["train"]["regularization"] = config["regularization"]
-
-    if use_graph:
-        dataset = GridGraphDataset(conf, conf["data"]["normal"])
-    else:
-        dataset = GridDataset(conf, conf["data"]["normal"])
-
-    train_dataset, val_dataset = torch.utils.data.random_split(dataset, [train_fraction, validate_fraction])
-    trainer = PINNTrainer(conf, dataset)
-    if ray.is_initialized():
-        trainer.train(0, train_dataset, val_dataset)
-    else:
-        mp.spawn(trainer.train, args=(train_dataset, val_dataset),
-                nprocs=gpus,
-                join=True)
 
 def train_localize(config: dict=None):
     if config is not None:
@@ -133,10 +112,7 @@ def hyperparameter_optimize():
             }
         )
     
-    if conf["train"]["tuned"] == "pinn":
-        tunable = train_pinn
-    else:
-        tunable = train_localize
+    tunable = train_localize
     trainer = TorchTrainer(
         tunable,
         scaling_config=ScalingConfig(num_workers=1, use_gpu=conf["train"]["cuda"]))
@@ -200,9 +176,7 @@ if __name__ == '__main__':
     gpus = conf["train"]["gpus"]
     use_graph = conf["model"]["graph"]
 
-    if task == "train_pinn":
-        train_pinn()
-    elif task == "train_localize":
+    if task == "train_localize":
         train_localize()
     elif task == "localize":
         localize()
@@ -221,27 +195,7 @@ if __name__ == '__main__':
             loss = torch.cat(losses)
             print("average loss:", torch.mean(loss))
             print("Standard dev:", torch.std(loss))
-        else:
-            dataset = GridDataset(conf, conf["data"]["attack"], True)
-            equations = build_equations(conf, dataset.get_categorical_features(), dataset.get_continuous_features())
-            features, labels = dataset.get_data()
-            start = 0
-            end = conf["train"]["batch_size"]
-            while start < len(features):
-                batch = features[start: end, :]
-                for equ in equations:
-                    loss = equ.evaluate(batch)
-                    losses.append(loss)
-                
-                start = end
-                end += conf["train"]["batch_size"]
-                if end > len(features):
-                    end = len(features)
-            losses = np.concatenate(losses)
-            print("States:", len(features))
-            print("Average loss:", np.mean(losses))
-            for i in range(len(equations)):
-                equations[i].loss_plot()
+
     elif task == "attack_generation":
         generate_fdia(conf)
     else:
