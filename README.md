@@ -14,4 +14,7 @@ If GPUs are available (recommended), the training can be configured to run on mu
 Evaluate a trained model's ability to localize an FDIA to the subset of sensors the attack modifies. The work of evaluating the model can be distributed over multiple CPUs/GPUs by setting the `train/cuda` and `train/gpus` configurations.  After the evaluation is complete, metrics averages over all of the sensors is reported. 
 
 ### hyperparameter_optimize
-Use Ray Tune to select the hyperparameters that lead to the top-performing model on the `attack` dataset.
+Use Ray Tune to select the hyperparameters that lead to the top-performing model on the `attack` dataset. The code will iteratively select new parameter combinations to try based on the results of the previous trails.
+
+## Data
+Pawer grid data is available at https://drive.google.com/drive/u/0/folders/1YBCPwr3UbDLT3H-moZcX1pDDtuKsQBY6
